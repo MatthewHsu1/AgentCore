@@ -1,6 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.AspNetCore.Voice.Routing;
-using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.Voice.Ports
 {
@@ -9,13 +8,13 @@ namespace AgentCore.AspNetCore.Voice.Ports
     /// </summary>
     public interface IConversationTransportAdapter : IConversationAdapter
     {
-        /// <summary>Builds the handler the conversation route answers every entry with.</summary>
+        /// <summary>Builds the route every entry answers on, with the check that the caller is the vendor.</summary>
         /// <param name="configuration">The <c>providers.conversation</c> block, including its limits.</param>
         /// <returns>
-        /// The delegate the conversation route runs. The route has already picked the entry and
-        /// refused one the document does not declare; the handler reads it with
+        /// The route. Its handler runs once the caller passed the check and the route picked the entry and refused one
+        /// the document does not declare; the handler reads it with
         /// <see cref="ConversationEndpointRouteBuilderExtensions.EntryOf"/>.
         /// </returns>
-        RequestDelegate CreateHandler(ConversationProviderConfiguration configuration);
+        ConversationRoute CreateRoute(ConversationProviderConfiguration configuration);
     }
 }

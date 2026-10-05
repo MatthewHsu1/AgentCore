@@ -28,7 +28,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
 
             ConversationSeamAdapters seams = Build(conversationKind: "bundled-fake", transport);
 
-            Assert.NotNull(seams.Handler);
+            Assert.NotNull(seams.Route);
 
             // The block handed over is the providers.conversation entry of this document, not null and not some
             // empty stand-in. The kind is what proves which entry it is.
@@ -58,7 +58,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
 
             // This case must route nothing AND say so. A route that vanishes in silence is
             // how a deployment loses every call to a 404 with nothing to read.
-            Assert.Null(seams.Handler);
+            Assert.Null(seams.Route);
             Assert.NotNull(seams.Unroutable);
             Assert.Contains("dial-out-fake", seams.Unroutable, StringComparison.Ordinal);
         }
@@ -69,31 +69,21 @@ namespace AgentCore.AspNetCore.Tests.Voice
             ConversationSeamAdapters seams = ConversationSeamStartup.Build(
                 ConfigurationLoader.LoadYaml(Document("bundled-fake")), new AgentCoreOptions());
 
-            Assert.Null(seams.Handler);
+            Assert.Null(seams.Route);
             Assert.NotNull(seams.Unroutable);
             Assert.Contains("no conversation adapter", seams.Unroutable, StringComparison.Ordinal);
         }
 
         [Fact]
-        public async Task AHostWithNoAgentCoreRegistrationAnswersTheRouteWithAReason()
+        public void MappingTheCallRouteOnAHostWithNoAgentCoreRegistrationFailsAtStartup()
         {
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
             _ = builder.Logging.ClearProviders();
-            _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
+            WebApplication app = builder.Build();
 
-            await using WebApplication app = builder.Build();
-            _ = app.MapCall();
-            await app.StartAsync(TestContext.Current.CancellationToken);
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => app.MapCall());
 
-            using HttpClient client = new() { BaseAddress = new Uri(Address(app)) };
-            HttpResponseMessage response = await client.GetAsync("/v1/main/call", TestContext.Current.CancellationToken);
-
-            // A readable refusal, and not the 404 a route that mapped nothing would have produced.
-            Assert.Equal(System.Net.HttpStatusCode.ServiceUnavailable, response.StatusCode);
-            Assert.Contains(
-                "registered no AgentCore services",
-                await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken),
-                StringComparison.Ordinal);
+            Assert.Contains("AddAgentCore", failure.Message, StringComparison.Ordinal);
         }
 
         [Fact]
@@ -161,10 +151,10 @@ namespace AgentCore.AspNetCore.Tests.Voice
 
             public ConversationProviderConfiguration? Configuration { get; private set; }
 
-            public RequestDelegate CreateHandler(ConversationProviderConfiguration configuration)
+            public ConversationRoute CreateRoute(ConversationProviderConfiguration configuration)
             {
                 Configuration = configuration;
-                return _ => Task.CompletedTask;
+                return new ConversationRoute(_ => Task.CompletedTask, _ => ValueTask.FromResult(true));
             }
         }
 

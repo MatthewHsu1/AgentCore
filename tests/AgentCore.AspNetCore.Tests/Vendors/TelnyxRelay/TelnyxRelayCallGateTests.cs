@@ -105,7 +105,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             await using TelnyxRelayHost host = await TelnyxRelayHost.StartThroughConversationSeamAsync(
                 TelnyxRelayTurnTests.PolicyYaml,
                 reply,
-                options => options.UseConversation(new TelnyxRelayConversationAdapter()).UseHooks(new CallDecider(gate => gate.Accept("thread-2", "BRIEF-X"))));
+                options => options.UseConversation(TelnyxRelayHost.KeyedAdapter()).UseHooks(new CallDecider(gate => gate.Accept("thread-2", "BRIEF-X"))));
             await using FakeRelayClient relay = await host.ConnectAsync();
 
             await relay.SendAsync(RelayFrames.Setup());

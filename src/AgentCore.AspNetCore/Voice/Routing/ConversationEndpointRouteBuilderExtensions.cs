@@ -2,6 +2,7 @@ using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Voice.Diagnostics;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +24,12 @@ namespace AgentCore.AspNetCore.Voice.Routing
         /// <summary>The route every entry answers on when the host names none.</summary>
         public const string DefaultPattern = "/v1/{" + EntryRouteParameter + "}/call";
 
+        /// <summary>
+        /// The authentication scheme the call route requires: the conversation vendor's own proof that a request came
+        /// from it. A host's sign-in leaves an endpoint that names this scheme to it.
+        /// </summary>
+        public const string CallerScheme = "AgentCore.Caller";
+
         /// <summary>Maps every entry on <see cref="DefaultPattern"/>, with the URL naming the entry.</summary>
         /// <param name="endpoints">The route builder of the host.</param>
         /// <returns>The mapped endpoint, so a host adds its own conventions.</returns>
@@ -43,9 +50,21 @@ namespace AgentCore.AspNetCore.Voice.Routing
             ArgumentNullException.ThrowIfNull(endpoints);
             ArgumentException.ThrowIfNullOrEmpty(pattern);
 
+            // The route requires the caller scheme AddAgentCore registers: without it every call would fail on its own,
+            // so the host fails here, where the fix is one line.
+            if (endpoints.ServiceProvider.GetService<IServiceProviderIsService>()?.IsService(typeof(AgentCoreBoot)) != true)
+            {
+                throw new InvalidOperationException(
+                    "app.MapCall() needs services.AddAgentCore(...): the call route requires the caller check AgentCore registers.");
+            }
+
             // Map, and not MapGet. An HTTP/2 WebSocket arrives as CONNECT rather than GET, and MapGet
             // would answer 405 to it.
-            return endpoints.Map(pattern, http => DispatchAsync(http, pattern)).WithMetadata(AgentCoreRouteMetadata.Call);
+            return endpoints.Map(pattern, http => DispatchAsync(http, pattern))
+                .WithMetadata(AgentCoreRouteMetadata.Call)
+                // The attribute form and not a policy object: a host middleware reads the scheme name off the
+                // endpoint's IAuthorizeData, and a policy object shows it none (docs/probes/call-route-auth).
+                .RequireAuthorization(new AuthorizeAttribute { AuthenticationSchemes = CallerScheme });
         }
 
         /// <summary>Reads the entry this request runs.</summary>
@@ -70,7 +89,7 @@ namespace AgentCore.AspNetCore.Voice.Routing
                 return;
             }
 
-            if (boot.ConversationHandler is not { } handler)
+            if (boot.ConversationRoute is not { Handler: var handler })
             {
                 await NotRoutedAsync(http, pattern, boot.ConversationUnroutable ?? "this host routes no inbound conversation")
                     .ConfigureAwait(false);

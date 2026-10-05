@@ -344,15 +344,17 @@ namespace AgentCore.Hosting.Tests
             return app;
         }
 
-        /// <summary>A chain that holds the connection string and answers nothing for it.</summary>
+        /// <summary>Answers an empty connection string and the relay's key, and nothing else.</summary>
         private sealed class EmptySecretResolver : ISecretResolverPort
         {
             public ValueTask<string?> TryResolveAsync(string name, CancellationToken cancellationToken = default)
             {
-                return ValueTask.FromResult(
-                                string.Equals(name, KnownSecrets.PostgresConnectionString.Name, StringComparison.Ordinal)
-                                    ? string.Empty
-                                    : null);
+                return ValueTask.FromResult(name switch
+                {
+                    KnownSecrets.PostgresConnectionStringName => string.Empty,
+                    KnownSecrets.TelnyxRelayKeyName => HostingTestHost.RelayKey,
+                    _ => null,
+                });
             }
         }
 

@@ -18,19 +18,19 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
     /// carries text, so it is itself both and there is nothing to build. The list goes in the container
     /// beside the document so that a vendor which does need constructing has somewhere to be found.
     /// </param>
-    /// <param name="Handler">
-    /// What the <c>MapCall</c> route runs for every entry, or <see langword="null"/> when this
+    /// <param name="Route">
+    /// What the <c>MapCall</c> route runs for every entry, and how it checks its caller, or <see langword="null"/> when this
     /// document routes no inbound conversation — the host registered no transport, wrote no
     /// <c>providers.conversation</c> block, or named a vendor this process dials out to, which has no inbound URL.
     /// </param>
     /// <param name="Unroutable">
-    /// Why <paramref name="Handler"/> is <see langword="null"/>, in the words a deployer can act on, or
+    /// Why <paramref name="Route"/> is <see langword="null"/>, in the words a deployer can act on, or
     /// <see langword="null"/> when conversations route.
     /// </param>
     internal readonly record struct ConversationSeamAdapters(
         IReadOnlyList<IConversationAdapter>? Conversation,
         IReadOnlyList<ISpeechAdapter>? Speech,
-        RequestDelegate? Handler,
+        ConversationRoute? Route,
         string? Unroutable);
 
     /// <summary>The two provider blocks a conversation arrives on: <c>providers.conversation</c> and <c>providers.speech</c>.</summary>
@@ -85,7 +85,7 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
                     options.Speech,
                     null,
                     $"'{selectedConversation.Kind}' is a vendor this process dials out to, so it answers no inbound route")
-                : new ConversationSeamAdapters(conversationAdapters, options.Speech, transport.CreateHandler(conversationEntry), null);
+                : new ConversationSeamAdapters(conversationAdapters, options.Speech, transport.CreateRoute(conversationEntry), null);
         }
 
         /// <summary>Refuses the knobs of AgentCore's own turn taking for a vendor that takes turns itself.</summary>

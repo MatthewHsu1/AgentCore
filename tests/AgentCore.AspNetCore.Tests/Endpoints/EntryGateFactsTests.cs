@@ -154,13 +154,15 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
 
             public bool Ran { get; private set; }
 
-            public RequestDelegate CreateHandler(ConversationProviderConfiguration configuration)
+            public ConversationRoute CreateRoute(ConversationProviderConfiguration configuration)
             {
-                return _ =>
-                {
-                    Ran = true;
-                    return Task.CompletedTask;
-                };
+                return new ConversationRoute(
+                    _ =>
+                    {
+                        Ran = true;
+                        return Task.CompletedTask;
+                    },
+                    _ => ValueTask.FromResult(true));
             }
         }
 

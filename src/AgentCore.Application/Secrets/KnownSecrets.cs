@@ -17,6 +17,12 @@ namespace AgentCore.Application.Secrets
         /// <summary>The environment variable the OpenAI webhook signing secret is read from.</summary>
         public const string OpenAiWebhookSecretVariable = "OPENAI_WEBHOOK_SECRET";
 
+        /// <summary>The <c>${secret:name}</c> name the Telnyx relay's shared key resolves under.</summary>
+        public const string TelnyxRelayKeyName = "telnyx-relay-key";
+
+        /// <summary>The environment variable the Telnyx relay's shared key is read from.</summary>
+        public const string TelnyxRelayKeyVariable = "TELNYX_RELAY_KEY";
+
         /// <summary>The <c>${secret:name}</c> name the OpenCode Go key resolves under.</summary>
         public const string OpenCodeGoApiKeyName = "opencode-go-api-key";
 
@@ -64,6 +70,9 @@ namespace AgentCore.Application.Secrets
 
         /// <summary>The secret OpenAI signs its webhooks with (Standard Webhooks, <c>whsec_…</c>). The openai-live adapter checks every call with it.</summary>
         public static readonly SecretName OpenAiWebhook = new(OpenAiWebhookSecretName, OpenAiWebhookSecretVariable);
+
+        /// <summary>The key the Telnyx relay's socket URL carries as <c>?key=</c>. /// </summary>
+        public static readonly SecretName TelnyxRelay = new(TelnyxRelayKeyName, TelnyxRelayKeyVariable);
 
         /// <summary>The OpenCode Go credential, which the chat adapter sends as its bearer token.</summary>
         public static readonly SecretName OpenCodeGo = new(OpenCodeGoApiKeyName, OpenCodeGoApiKeyVariable);

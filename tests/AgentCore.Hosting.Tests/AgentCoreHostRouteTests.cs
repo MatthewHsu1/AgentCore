@@ -81,7 +81,8 @@ namespace AgentCore.Hosting.Tests
             await using WebApplication app = await StartMappedAsync();
             using HttpClient client = new() { BaseAddress = Address(app) };
 
-            HttpResponseMessage response = await client.GetAsync("/v1/nobody/call", TestContext.Current.CancellationToken);
+            // Without the relay's key the caller is refused before the route reads the entry.
+            HttpResponseMessage response = await client.GetAsync("/v1/nobody/call?key=" + HostingTestHost.RelayKey, TestContext.Current.CancellationToken);
 
             Assert.Equal(System.Net.HttpStatusCode.NotFound, response.StatusCode);
             Assert.Contains(

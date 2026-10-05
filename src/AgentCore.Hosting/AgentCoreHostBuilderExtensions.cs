@@ -111,9 +111,9 @@ namespace AgentCore.Hosting
 
             _ = options.UseTelemetry(new GrafanaOtlpTelemetryAdapter());
 
+            // The host's own callback runs after this one and may set another resolver, so each adapter reads it late.
             _ = options.UseConversation(
-                new TelnyxRelayConversationAdapter(),
-                // The host's own callback runs after this one and may set another resolver.
+                new TelnyxRelayConversationAdapter(() => options.SecretResolver),
                 new OpenAiLiveConversationAdapter(httpClients, () => options.SecretResolver));
 
             _ = options.UseSpeech(new TelnyxRelaySpeechAdapter());

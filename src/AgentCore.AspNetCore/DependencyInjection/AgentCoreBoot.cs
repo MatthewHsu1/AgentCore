@@ -101,7 +101,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
         internal IBlobStore? Blobs => Started.Blobs;
 
         /// <summary>Gets what the conversation route runs, or <see langword="null"/> when no conversation routes here.</summary>
-        internal RequestDelegate? ConversationHandler => Started.ConversationHandler;
+        internal ConversationRoute? ConversationRoute => Started.ConversationRoute;
 
         /// <summary>Gets why no conversation routes here, or <see langword="null"/> when conversations route.</summary>
         internal string? ConversationUnroutable => Started.ConversationUnroutable;
@@ -278,6 +278,12 @@ namespace AgentCore.AspNetCore.DependencyInjection
 
             ConversationSeamAdapters seams = ConversationSeamStartup.Build(configuration, _options);
 
+            // A caller check whose secret is missing stops the host here, rather than refusing every call later.
+            if (seams.Route is { } route)
+            {
+                await route.Ready.ConfigureAwait(false);
+            }
+
             ConversationSessionSeam conversation = ConversationSessionStartup.Open(this, _options, graph, auditQueue, _loggers);
 
             Started = new BootState(
@@ -294,7 +300,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
                 knowledge,
                 seams.Conversation,
                 seams.Speech,
-                seams.Handler,
+                seams.Route,
                 seams.Unroutable,
                 runtime);
         }
@@ -376,7 +382,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
             IKnowledgeRetrievalPort? Knowledge,
             IReadOnlyList<IConversationAdapter>? ConversationAdapters,
             IReadOnlyList<ISpeechAdapter>? SpeechAdapters,
-            RequestDelegate? ConversationHandler,
+            ConversationRoute? ConversationRoute,
             string? ConversationUnroutable,
             HookRuntime Hooks);
     }

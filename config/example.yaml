@@ -364,10 +364,14 @@ providers:
   #   conversation the media pipe. It carries the audio and owns the route /v1/{entry}/call.
   #   speech      recognition (stt) and synthesis (tts), one role at a time.
   conversation:      { kind: telnyx-relay }
+  # The call route only answers a caller that proves it is the vendor. Telnyx signs no relay socket, so its
+  # TeXML URL carries a shared key: wss://<host>/v1/<entry>/call?key=<TELNYX_RELAY_KEY>. Without the
+  # TELNYX_RELAY_KEY secret the host does not start.
   # The GPT-Live phone path instead. It speaks for itself, so it needs no speech: block. AgentCore adds
   # no prompt text of its own: GPT-Live hears only what this block says, plus the host's per-call brief.
   # Without a "never guess, delegate" paragraph GPT-Live made up product facts in 4 of 6 test calls,
-  # and it cannot hang up, so tell it to pass an end request to the backend.
+  # and it cannot hang up, so tell it to pass an end request to the backend. OpenAI signs every call's
+  # webhook, and the route checks it with the OPENAI_WEBHOOK_SECRET secret.
   # conversation:
   #   kind: openai-live
   #   live:

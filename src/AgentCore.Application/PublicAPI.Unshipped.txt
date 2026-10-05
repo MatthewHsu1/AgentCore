@@ -3158,3 +3158,6 @@ static AgentCore.Application.Conversation.Actions.TransferAction.operator !=(Age
 virtual AgentCore.Application.Conversation.Actions.ConversationAction.EqualityContract.get -> System.Type!
 virtual AgentCore.Application.Conversation.Actions.ConversationAction.Equals(AgentCore.Application.Conversation.Actions.ConversationAction? other) -> bool
 virtual AgentCore.Application.Conversation.Actions.ConversationAction.PrintMembers(System.Text.StringBuilder! builder) -> bool
+const AgentCore.Application.Secrets.KnownSecrets.TelnyxRelayKeyName = "telnyx-relay-key" -> string!
+const AgentCore.Application.Secrets.KnownSecrets.TelnyxRelayKeyVariable = "TELNYX_RELAY_KEY" -> string!
+static readonly AgentCore.Application.Secrets.KnownSecrets.TelnyxRelay -> AgentCore.Application.Secrets.SecretName!

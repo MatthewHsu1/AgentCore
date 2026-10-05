@@ -1,5 +1,6 @@
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Ports;
+using AgentCore.Application.Secrets;
 using AgentCore.Application.Runtime.Session;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
@@ -27,6 +28,16 @@ namespace AgentCore.AspNetCore.Tests.Fakes
 
         /// <summary>The relay's own route, with the document's one entry filled in.</summary>
         public const string MainRelay = "/v1/main/telnyx/relay";
+
+        /// <summary>The shared key a relay call carries in its URL.</summary>
+        public const string RelayKey = "relay-key-1";
+
+        /// <summary>The vendor-neutral conversation route with the relay's key, as Telnyx would dial it.</summary>
+        public const string KeyedMainConversation = MainConversation + "?" + TelnyxRelayConversationAdapter.KeyParameter + "=" + RelayKey;
+
+        /// <summary>A Telnyx adapter that holds <see cref="RelayKey"/>, as a host's secret resolver would give it.</summary>
+        public static TelnyxRelayConversationAdapter KeyedAdapter()
+            => new(() => new MapSecretResolver().With(KnownSecrets.TelnyxRelayKeyName, RelayKey));
 
         private readonly WebApplication _app;
         private readonly HttpClient _client;
@@ -151,7 +162,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             {
                 // The vendor-neutral seam picks the transport out of providers.conversation and the adapter the
                 // test registered. Nothing here names a route or a vendor.
-                route = MainConversation;
+                route = KeyedMainConversation;
                 _ = app.MapCall();
             }
             else

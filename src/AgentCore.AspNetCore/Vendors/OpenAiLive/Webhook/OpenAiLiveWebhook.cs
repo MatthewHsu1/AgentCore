@@ -39,6 +39,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
             OpenAiLiveCalls calls = services.GetRequiredService<OpenAiLiveCalls>();
             OpenAiLiveCredentials keys = await credentials.ConfigureAwait(false);
 
+            // IsOpenAiAsync already checked the signature over this body.
             if (await ReadBodyAsync(http.Request, http.RequestAborted).ConfigureAwait(false) is not { } body)
             {
                 http.Response.StatusCode = StatusCodes.Status413PayloadTooLarge;
@@ -46,12 +47,6 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
             }
 
             string? webhookId = Header(http, "webhook-id");
-            if (!StandardWebhookSignature.Verify(keys.WebhookKey, webhookId, Header(http, "webhook-timestamp"), body, Header(http, "webhook-signature"), time.GetUtcNow()))
-            {
-                OpenAiLiveLog.SignatureRefused(logger);
-                http.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return;
-            }
 
             http.Response.StatusCode = StatusCodes.Status200OK;
             if (!calls.TryClaimWebhook(webhookId!, time.GetUtcNow())
@@ -192,6 +187,25 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
 
         private static string? Header(HttpContext http, string name) =>
             http.Request.Headers.TryGetValue(name, out StringValues value) ? value.ToString() : null;
+
+        /// <summary>Leaves the body buffered, because <see cref="HandleAsync"/> reads it again.</summary>
+        internal async ValueTask<bool> IsOpenAiAsync(HttpContext http)
+        {
+            OpenAiLiveCredentials keys = await credentials.ConfigureAwait(false);
+            http.Request.EnableBuffering();
+            byte[]? body = await ReadBodyAsync(http.Request, http.RequestAborted).ConfigureAwait(false);
+            http.Request.Body.Position = 0;
+
+            TimeProvider time = http.RequestServices.GetRequiredService<TimeProvider>();
+            if (body is not null
+                && StandardWebhookSignature.Verify(keys.WebhookKey, Header(http, "webhook-id"), Header(http, "webhook-timestamp"), body, Header(http, "webhook-signature"), time.GetUtcNow()))
+            {
+                return true;
+            }
+
+            OpenAiLiveLog.SignatureRefused(http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("AgentCore.OpenAiLive"));
+            return false;
+        }
 
         private static async Task<byte[]?> ReadBodyAsync(HttpRequest request, CancellationToken cancellationToken)
         {

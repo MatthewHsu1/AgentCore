@@ -12,6 +12,8 @@ using Microsoft.Agents.AI.Hosting;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.WebSockets;
 using Microsoft.Extensions.DependencyInjection;
+using AgentCore.AspNetCore.Voice.Routing;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
@@ -83,6 +85,13 @@ namespace AgentCore.AspNetCore.DependencyInjection
             services.TryAddSingleton(provider =>
                 provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.TimeProvider
                 ?? TimeProvider.System);
+
+            // The call route requires this scheme. It never becomes the default, so a host's own sign-in stays in charge
+            // of every other route. Registered after the clock: AddAuthentication registers the system clock if none is,
+            // and would win over AgentCoreOptions.TimeProvider.
+            _ = services.AddAuthentication()
+                .AddScheme<AuthenticationSchemeOptions, CallerAuthenticationHandler>(ConversationEndpointRouteBuilderExtensions.CallerScheme, configureOptions: null);
+            _ = services.AddAuthorization();
 
             services.TryAddSingleton(provider =>
                 provider.GetRequiredService<IOptions<AgentCoreOptions>>().Value.Cache

@@ -5,6 +5,9 @@ using AgentCore.Application.Hooks.Gates;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
+using AgentCore.AspNetCore.Voice.Routing;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Routing;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -71,13 +74,29 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         public async Task ABadSignatureIsRefusedBeforeAnyHookRuns()
         {
             bool asked = false;
-            await using OpenAiLiveHost host = await OpenAiLiveHost.StartAsync(new StallOnCueChatClient(), [new CallDecider(_ => asked = true)]);
+            EntryCounter entries = new();
+            await using OpenAiLiveHost host = await OpenAiLiveHost.StartAsync(new StallOnCueChatClient(), [entries, new CallDecider(_ => asked = true)]);
 
             HttpResponseMessage response = await host.PostWebhookAsync(OpenAiLiveHost.IncomingCall("rtc_123"), secret: "whsec_" + Convert.ToBase64String(new byte[24]));
 
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
             Assert.False(asked);
+            Assert.Equal(0, entries.Count);
             Assert.Empty(host.Control.Requests);
+        }
+
+        // A host's sign-in middleware finds the scheme only through IAuthorizeData (docs/probes/call-route-auth).
+        [Fact(Timeout = 30_000)]
+        public async Task TheCallRouteNamesTheCallerSchemeWhereAHostsSignInCanReadIt()
+        {
+            await using OpenAiLiveHost host = await OpenAiLiveHost.StartAsync(new StallOnCueChatClient(), []);
+
+            RouteEndpoint call = host.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+                .Single(endpoint => endpoint.RoutePattern.RawText == ConversationEndpointRouteBuilderExtensions.DefaultPattern);
+
+            Assert.Equal(
+                [ConversationEndpointRouteBuilderExtensions.CallerScheme],
+                call.Metadata.GetOrderedMetadata<IAuthorizeData>().Select(data => data.AuthenticationSchemes));
         }
 
         [Fact(Timeout = 30_000)]

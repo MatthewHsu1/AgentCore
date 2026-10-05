@@ -3,7 +3,6 @@ using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook;
 using AgentCore.AspNetCore.Vendors.OpenAiLive.Wire;
 using AgentCore.AspNetCore.Voice.Ports;
-using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.Vendors.OpenAiLive
 {
@@ -78,12 +77,12 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
         /// <inheritdoc />
         public CallTraits Traits => CallTraits.SpeaksForItself | CallTraits.TakesTurnsItself;
 
-        /// <summary>Gets the keys being resolved once <see cref="CreateHandler"/> ran, or <see langword="null"/>.</summary>
+        /// <summary>Gets the keys being resolved once <see cref="CreateRoute"/> ran, or <see langword="null"/>.</summary>
         internal Task<OpenAiLiveCredentials>? Credentials { get; private set; }
 
         /// <inheritdoc />
         /// <exception cref="Application.Configuration.Parsing.ConfigurationLoadException">The <c>live:</c> block is missing or wrong.</exception>
-        public RequestDelegate CreateHandler(ConversationProviderConfiguration configuration)
+        public ConversationRoute CreateRoute(ConversationProviderConfiguration configuration)
         {
             ArgumentNullException.ThrowIfNull(configuration);
 
@@ -94,7 +93,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
             // The pipeline owns the handler chain, and other clients send on it, so this client disposes nothing.
             HttpClient http = new(_handlers.CreateHandler(HttpClientName), disposeHandler: false) { BaseAddress = _apiBase };
             OpenAiLiveWebhook webhook = new(settings, configuration, credentials, new OpenAiLiveControl(http, credentials), _attach, _apiBase);
-            return webhook.HandleAsync;
+            return new ConversationRoute(webhook.HandleAsync, webhook.IsOpenAiAsync) { Ready = credentials };
         }
     }
 }

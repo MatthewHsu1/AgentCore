@@ -1,7 +1,6 @@
 #nullable enable
 AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions
 AgentCore.AspNetCore.Voice.Ports.IConversationTransportAdapter
-AgentCore.AspNetCore.Voice.Ports.IConversationTransportAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.AgentCoreHttpClients(System.Net.Http.HttpMessageHandler? primaryHandler = null, Microsoft.Extensions.Logging.ILoggerFactory? loggers = null) -> void
 AgentCore.AspNetCore.DependencyInjection.AgentCoreHttpClients.CreateClient(string! name) -> System.Net.Http.HttpClient!
@@ -63,9 +62,7 @@ override AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.GetSessionAsyn
 override AgentCore.AspNetCore.Sessions.AgentCoreAgentSessionStore.SaveSessionAsync(Microsoft.Agents.AI.AIAgent! agent, string! sessionStoreId, Microsoft.Agents.AI.AgentSession! session, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.CarriesText.get -> bool
-AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.Kind.get -> string!
-AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.TelnyxRelayConversationAdapter() -> void
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.Kind.get -> string!
 AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelaySpeechAdapter.TelnyxRelaySpeechAdapter() -> void
@@ -216,7 +213,6 @@ static AgentCore.AspNetCore.DependencyInjection.AgentCoreHookOptions.UseHooks(th
 static AgentCore.AspNetCore.DependencyInjection.AgentCoreHookOptions.UseHooks<THook>(this AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions! options) -> AgentCore.AspNetCore.DependencyInjection.AgentCoreOptions!
 AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter
 AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.CarriesText.get -> bool
-AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.CreateHandler(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> Microsoft.AspNetCore.Http.RequestDelegate!
 AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.Kind.get -> string!
 AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.OpenAiLiveConversationAdapter(System.Net.Http.IHttpMessageHandlerFactory! handlers, AgentCore.Application.Ports.ISecretResolverPort? secrets = null) -> void
 AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.Traits.get -> AgentCore.AspNetCore.Voice.Ports.CallTraits
@@ -228,3 +224,25 @@ AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Headers.get -> System
 AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.Headers.init -> void
 AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.To.get -> string?
 AgentCore.AspNetCore.Voice.Ports.ConversationInput.Started.To.init -> void
+AgentCore.AspNetCore.Vendors.OpenAiLive.OpenAiLiveConversationAdapter.CreateRoute(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> AgentCore.AspNetCore.Voice.Ports.ConversationRoute!
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.CreateRoute(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> AgentCore.AspNetCore.Voice.Ports.ConversationRoute!
+AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.TelnyxRelayConversationAdapter(System.Func<AgentCore.Application.Ports.ISecretResolverPort?>? secrets = null) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.<Clone>$() -> AgentCore.AspNetCore.Voice.Ports.ConversationRoute!
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.ConversationRoute(Microsoft.AspNetCore.Http.RequestDelegate! Handler, System.Func<Microsoft.AspNetCore.Http.HttpContext!, System.Threading.Tasks.ValueTask<bool>>! IsVendor) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.Deconstruct(out Microsoft.AspNetCore.Http.RequestDelegate! Handler, out System.Func<Microsoft.AspNetCore.Http.HttpContext!, System.Threading.Tasks.ValueTask<bool>>! IsVendor) -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.Equals(AgentCore.AspNetCore.Voice.Ports.ConversationRoute? other) -> bool
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.Handler.get -> Microsoft.AspNetCore.Http.RequestDelegate!
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.Handler.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.IsVendor.get -> System.Func<Microsoft.AspNetCore.Http.HttpContext!, System.Threading.Tasks.ValueTask<bool>>!
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.IsVendor.init -> void
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.Ready.get -> System.Threading.Tasks.Task!
+AgentCore.AspNetCore.Voice.Ports.ConversationRoute.Ready.init -> void
+AgentCore.AspNetCore.Voice.Ports.IConversationTransportAdapter.CreateRoute(AgentCore.Application.Configuration.Schema.ConversationProviderConfiguration! configuration) -> AgentCore.AspNetCore.Voice.Ports.ConversationRoute!
+const AgentCore.AspNetCore.Vendors.TelnyxRelay.TelnyxRelayConversationAdapter.KeyParameter = "key" -> string!
+const AgentCore.AspNetCore.Voice.Routing.ConversationEndpointRouteBuilderExtensions.CallerScheme = "AgentCore.Caller" -> string!
+override AgentCore.AspNetCore.Voice.Ports.ConversationRoute.Equals(object? obj) -> bool
+override AgentCore.AspNetCore.Voice.Ports.ConversationRoute.GetHashCode() -> int
+override AgentCore.AspNetCore.Voice.Ports.ConversationRoute.ToString() -> string!
+static AgentCore.AspNetCore.Voice.Ports.ConversationRoute.operator ==(AgentCore.AspNetCore.Voice.Ports.ConversationRoute? left, AgentCore.AspNetCore.Voice.Ports.ConversationRoute? right) -> bool
+static AgentCore.AspNetCore.Voice.Ports.ConversationRoute.operator !=(AgentCore.AspNetCore.Voice.Ports.ConversationRoute? left, AgentCore.AspNetCore.Voice.Ports.ConversationRoute? right) -> bool
