@@ -3,6 +3,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
+using AgentCore.Application.Conversation.Actions;
 using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Policy;
@@ -102,6 +103,8 @@ namespace AgentCore.Application.Runtime.Session
 
         internal FinishedToolPairs ToolPairs { get; }
 
+        internal ConversationActions Actions { get; }
+
         /// <summary>
         /// Creates the session of one conversation.
         /// </summary>
@@ -116,29 +119,17 @@ namespace AgentCore.Application.Runtime.Session
             (CompiledAgent? compiled, IGuardEvaluator? guards, StateExtractor? extractor, TimeProvider? timeProvider, ILogger? logger, HookRuntime? hooks) = seams;
 
             ConversationId = conversationId;
-
             Logger = logger ?? NullLogger.Instance;
-
             WorkspaceRoot = workspace;
-
             Shells = workspace is null ? null : new ConversationShells(workspace.Path, Logger);
-
             Compiled = compiled;
-
             History = compiled.History;
-
             SessionCarriesHistory = compiled.SessionCarriesHistory;
-
             Extractor = extractor;
-
             Counters = new CounterStateWriter(guards);
-
             Time = timeProvider;
-
             Hooks = new SessionHooks(hooks, conversationId, compiled.EntryName, timeProvider);
-
             StartedAt = timeProvider.GetUtcNow();
-
             Policy = compiled.Policy is null ? null : compiled.CreatePolicy(guards);
 
             State = new StateDocument(compiled.Configuration, Policy?.Stage);
@@ -146,24 +137,16 @@ namespace AgentCore.Application.Runtime.Session
             _ = ConstStateWriter.Apply(State);
 
             Runner = new ConversationTurnRunner(this);
-
             Stream = new ConversationTurnStream(this);
-
             Writers = new ConversationTurnWriters(this);
-
             Cuts = new ConversationCutTracker(this);
-
             Ledger = new ConversationTranscriptLedger(this);
-
             States = new ConversationSessionStateStore(this);
-
             Lifetime = new ConversationSessionLifetime(this);
-
             Busy = new ConversationBusyMark(this);
-
             ToolPairs = new FinishedToolPairs(this);
-
             ToolRuns = new ConversationToolRuns(ToolPairs.Keep);
+            Actions = new ConversationActions(this);
         }
 
         /// <summary>
@@ -369,6 +352,12 @@ namespace AgentCore.Application.Runtime.Session
         public bool EndConversation(ConversationEndReason reason)
         {
             return Lifetime.EndConversation(reason);
+        }
+
+        /// <inheritdoc cref="IConversationControl.Request"/>
+        public ConversationActionResult Request(ConversationAction action)
+        {
+            return Actions.Request(action);
         }
 
         /// <summary>

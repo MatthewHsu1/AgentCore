@@ -143,6 +143,7 @@ namespace AgentCore.Application.Runtime.Agents
 
                 // An edit that withdraws the turn that asked leaves its requests unanswered: the edit drops them.
                 IReadOnlySet<string> withdrawn = TurnApprovalAnswers.Withdrawn(_session.History, session, origin);
+                
                 ChatMessage spoken = !userInput.Contents.OfType<ToolApprovalResponseContent>().Any()
                     && PendingApprovalQueue.Open(session).Where(request => !withdrawn.Contains(request.RequestId)).ToList() is { Count: > 0 } open
                         ? TurnApprovalAnswers.MovedOn(userInput, open)
@@ -264,6 +265,7 @@ namespace AgentCore.Application.Runtime.Agents
                 ToolRuns = _session.ToolRuns,
                 Notices = new TurnNotices(),
                 Hooks = _session.Hooks,
+                Control = _session.Actions,
                 RefusalReply = _session.Compiled.RefusalReply,
                 Items = new ConcurrentDictionary<string, object?>(StringComparer.Ordinal),
                 Rounds = new TurnRounds(),

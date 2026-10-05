@@ -5,8 +5,10 @@ using AgentCore.Application.Secrets;
 
 namespace AgentCore.AspNetCore.Vendors.OpenAiLive
 {
-    /// <summary>The <c>providers.conversation.live</c> block, read and checked at boot.</summary>
-    /// <remarks>AgentCore adds no prompt text of its own: every word GPT-Live is told to say comes from this block.</remarks>
+    /// <summary>
+    /// The <c>providers.conversation.live</c> block, read and checked at boot so a typo fails the start and not the first
+    /// caller. Every word GPT-Live hears comes from here, because AgentCore holds no prompt text of its own.
+    /// </summary>
     /// <param name="Instructions">GPT-Live's whole prompt, sent as written.</param>
     /// <param name="Voice">The voice GPT-Live speaks with.</param>
     /// <param name="Model">The GPT-Live model.</param>
@@ -36,6 +38,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
             string? voice = null;
             string? model = null;
             string? greeting = null;
+            
             foreach (JsonProperty property in configuration.Live.EnumerateObject())
             {
                 switch (property.Name)

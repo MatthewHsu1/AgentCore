@@ -1,4 +1,5 @@
 using AgentCore.Application.Tools;
+using AgentCore.Application.Runtime.Session;
 using AgentCore.Application.Runtime.Turn;
 
 namespace AgentCore.Application.Runtime.ToolCalls
@@ -20,7 +21,11 @@ namespace AgentCore.Application.Runtime.ToolCalls
         {
             ArgumentNullException.ThrowIfNull(invocation);
 
-            return new ToolCallScope(invocation.ConversationId, invocation.TurnIndex, invocation.Stage, invocation.Workspace) { Items = invocation.Items };
+            return new ToolCallScope(invocation.ConversationId, invocation.TurnIndex, invocation.Stage, invocation.Workspace)
+            {
+                Items = invocation.Items,
+                Conversation = invocation.Control ?? UnattachedConversationControl.Instance,
+            };
         }
     }
 }

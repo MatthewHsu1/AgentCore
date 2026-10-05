@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using AgentCore.Application.Conversation.Actions;
 using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.State;
@@ -76,6 +77,9 @@ namespace AgentCore.Application.Runtime.Turn
 
         /// <summary>Gets the session's hook raiser, or <see langword="null"/> outside a conversation turn.</summary>
         public SessionHooks? Hooks { get; init; }
+
+        /// <summary>Carried here so that a tool's scope and a background child's tools reach the same session door.</summary>
+        public IConversationControl? Control { get; init; }
 
         /// <summary>
         /// Gets the turn's shared state, which gates expose as <c>Items</c> and tools as <see cref="Tools.ToolCallScope.Items"/>,

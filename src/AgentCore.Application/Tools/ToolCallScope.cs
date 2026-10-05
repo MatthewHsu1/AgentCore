@@ -1,3 +1,6 @@
+using AgentCore.Application.Conversation.Actions;
+using AgentCore.Application.Runtime.Session;
+
 namespace AgentCore.Application.Tools
 {
     /// <summary>The conversation a bound tool runs in. A binding declares a parameter of this type to receive it; the model never sees that parameter.</summary>
@@ -12,5 +15,11 @@ namespace AgentCore.Application.Tools
         /// turn. Durable data belongs in <c>ConversationRecord.Custom</c>.
         /// </summary>
         public IDictionary<string, object?>? Items { get; init; }
+
+        /// <summary>
+        /// Gets the conversation's action door. It sits on the scope because the binder already hands every tool the
+        /// scope, so a tool needs no new parameter. Outside a turn it refuses every action: there is no conversation.
+        /// </summary>
+        public IConversationControl Conversation { get; init; } = UnattachedConversationControl.Instance;
     }
 }

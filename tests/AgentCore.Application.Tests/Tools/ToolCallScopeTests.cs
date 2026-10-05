@@ -1,5 +1,6 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
+using AgentCore.Application.Conversation.Actions;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -7,6 +8,7 @@ using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Tools.Registry;
+using AgentCore.Domain.Audit;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Application.Runtime.Session;
@@ -41,22 +43,7 @@ namespace AgentCore.Application.Tests.Tools
             List<ToolCallScope> captured = [];
             ToolBindingRegistry bindings = new();
             _ = bindings.Register("RequestHuman", (string reason, ToolCallScope scope) => captured.Add(scope));
-
-            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(Yaml);
-            FakeChatClientFactory chatClients = new(new PerTurnToolCallingChatClient("connecting you now."));
-            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
-                document,
-                new AgentCompilationContext(chatClients)
-                {
-                    Tools = await ToolRegistryBuilder.BuildAsync(
-                        [new BindingToolSource(bindings)],
-                        new ToolSourceContext(document),
-                        TestContext.Current.CancellationToken),
-                })["main"];
-
-            ConversationSessionFactory factory = new(
-                compiled, new GuardEvaluator(compiled.Configuration.Guards));
-            ConversationSession session = factory.Create("conversation-scope-1");
+            ConversationSession session = await CreateAsync(bindings, "conversation-scope-1");
 
             _ = await session.RunTurnAsync("I need a person", TestContext.Current.CancellationToken);
 
@@ -71,6 +58,39 @@ namespace AgentCore.Application.Tests.Tools
             ToolCallScope second = Assert.Single(captured);
             Assert.Equal(session.ConversationId, second.ConversationId);
             Assert.Equal(1, second.TurnIndex);
+        }
+
+        [Fact]
+        public async Task ABoundToolAsksItsOwnConversationForAnActionThroughTheScope()
+        {
+            List<ConversationActionResult> answers = [];
+            ToolBindingRegistry bindings = new();
+            _ = bindings.Register(
+                "RequestHuman",
+                (string reason, ToolCallScope scope) => answers.Add(scope.Conversation.Request(new EndConversationAction(ConversationEndReason.TransferredToHuman))));
+            ConversationSession session = await CreateAsync(bindings, "conversation-scope-2");
+
+            _ = await session.RunTurnAsync("I need a person", TestContext.Current.CancellationToken);
+
+            Assert.Equal(ConversationActionResult.Scheduled, Assert.Single(answers));
+            Assert.True(session.IsComplete);
+        }
+
+        private static async Task<ConversationSession> CreateAsync(ToolBindingRegistry bindings, string conversationId)
+        {
+            AgentCoreConfiguration document = ConfigurationLoader.LoadYaml(Yaml);
+            FakeChatClientFactory chatClients = new(new PerTurnToolCallingChatClient("connecting you now."));
+            CompiledAgent compiled = ConfigurationCompiler.CompileAll(
+                document,
+                new AgentCompilationContext(chatClients)
+                {
+                    Tools = await ToolRegistryBuilder.BuildAsync(
+                        [new BindingToolSource(bindings)],
+                        new ToolSourceContext(document),
+                        TestContext.Current.CancellationToken),
+                })["main"];
+
+            return new ConversationSessionFactory(compiled, new GuardEvaluator(compiled.Configuration.Guards)).Create(conversationId);
         }
 
         /// <summary>
