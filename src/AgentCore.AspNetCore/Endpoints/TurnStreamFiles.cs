@@ -1,5 +1,4 @@
 using AgentCore.Application.Transcript;
-using System.Runtime.CompilerServices;
 using AgentCore.Application.Conversation;
 using Microsoft.Extensions.AI;
 using AgentCore.Application.Blobs;
@@ -7,7 +6,7 @@ using AgentCore.Application.Blobs;
 namespace AgentCore.AspNetCore.Endpoints
 {
     /// <summary>
-    /// The files one turn published, linked for the browser once the turn is over.
+    /// The files one turn published, listed for the browser once the turn is over.
     /// </summary>
     internal sealed class TurnStreamFiles
     {
@@ -20,26 +19,18 @@ namespace AgentCore.AspNetCore.Endpoints
             _files.AddRange(update.Contents.OfType<FileContent>());
         }
 
-        /// <summary>Links every noted file the store kept, in the order they were noted.</summary>
+        /// <summary>Lists every noted file the store kept, in the order they were noted.</summary>
         /// <param name="conversations">The door to the stored conversation.</param>
         /// <param name="conversationId">The conversation that owns the files.</param>
-        /// <param name="cancellationToken">Cancels the lookups.</param>
         /// <returns>One part for each file the store holds.</returns>
-        internal async IAsyncEnumerable<TurnStreamPart> ResolveAsync(
-            Conversations conversations,
-            string conversationId,
-            [EnumeratorCancellation] CancellationToken cancellationToken)
+        internal IEnumerable<TurnStreamPart> Resolve(Conversations conversations, string conversationId)
         {
             if (_files.Count == 0)
             {
                 yield break;
             }
 
-            IReadOnlyList<FileLink> links = await conversations
-                .LinkFilesAsync(conversationId, [new ChatMessage(ChatRole.Assistant, [.. _files])], cancellationToken)
-                .ConfigureAwait(false);
-
-            foreach ((BlobRef? blob, Uri? url) in links)
+            foreach (BlobRef blob in conversations.KeptFiles(conversationId, [new ChatMessage(ChatRole.Assistant, [.. _files])]))
             {
                 yield return new TurnStreamPart(TurnStreamPart.File, new FilePayload
                 {
@@ -47,7 +38,6 @@ namespace AgentCore.AspNetCore.Endpoints
                     Title = _files.LastOrDefault(file => string.Equals(file.Name, blob.Name, StringComparison.Ordinal))?.Title,
                     MediaType = blob.MediaType,
                     Length = blob.Length,
-                    Url = url?.ToString(),
                 });
             }
         }

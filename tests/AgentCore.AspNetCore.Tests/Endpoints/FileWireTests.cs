@@ -84,14 +84,14 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             Assert.Equal("Quarterly report", file.GetProperty("title").GetString());
             Assert.Equal("text/csv", file.GetProperty("media_type").GetString());
             Assert.Equal(19, file.GetProperty("length").GetInt64());
-            Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", file.GetProperty("url").GetString());
+            Assert.Equal(["name", "title", "media_type", "length"], file.EnumerateObject().Select(property => property.Name));
 
             // The bytes are in the store, owned by the conversation.
             (string? mediaType, byte[]? bytes) = blobs.Store.Blobs[(ConversationId, "report.csv")];
             Assert.Equal("text/csv", mediaType);
             Assert.Equal("month,sales\njan,10\n", System.Text.Encoding.UTF8.GetString(bytes));
 
-            // The model read the link back in its tool result.
+            // The model reads the sandbox name back in its tool result, never a storage URL.
             JsonElement toolResult = events
                 .Select(text => JsonDocument.Parse(text).RootElement)
                 .Where(chunk => chunk.TryGetProperty("agentcore_tool", out JsonElement tool)
@@ -99,16 +99,19 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 .Select(chunk => chunk.GetProperty("agentcore_tool"))
                 .Single();
             Assert.False(toolResult.GetProperty("failed").GetBoolean());
-            Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", toolResult.GetProperty("result").GetProperty("url").GetString());
+            Assert.Equal(
+                ["name", "mediaType", "length", "link"],
+                toolResult.GetProperty("result").EnumerateObject().Select(property => property.Name));
+            Assert.Equal("sandbox:/report.csv", toolResult.GetProperty("result").GetProperty("link").GetString());
 
-            // And a later read of the transcript links the same file again.
+            // A later read of the transcript lists the same file as facts, and a click mints a fresh link.
             Conversations conversations = host.Services.GetRequiredService<Conversations>();
             IReadOnlyList<ConversationMessage> stored = await conversations.ReadAllAsync(ConversationId, TestContext.Current.CancellationToken);
-            IReadOnlyList<FileLink> links = await conversations.LinkFilesAsync(ConversationId, stored.Select(row => row.Content), TestContext.Current.CancellationToken);
+            BlobRef kept = Assert.Single(conversations.KeptFiles(ConversationId, stored.Select(row => row.Content)));
+            Assert.Equal((ConversationId, "report.csv", "text/csv", 19L), (kept.OwnerId, kept.Name, kept.MediaType, kept.Length));
 
-            FileLink link = Assert.Single(links);
-            Assert.Equal((ConversationId, "report.csv", "text/csv", 19L), (link.Blob.OwnerId, link.Blob.Name, link.Blob.MediaType, link.Blob.Length));
-            Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=900", link.Url?.ToString());
+            Uri? url = await conversations.LinkFileAsync(ConversationId, "report.csv", TestContext.Current.CancellationToken);
+            Assert.Equal($"https://blobs.test/{ConversationId}/report.csv?ttl=300", url?.ToString());
         }
 
         [Fact]

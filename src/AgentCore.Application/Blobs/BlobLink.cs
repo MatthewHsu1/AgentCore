@@ -4,7 +4,7 @@ namespace AgentCore.Application.Blobs
     public static class BlobLink
     {
         /// <summary>How long a link works.</summary>
-        public static TimeSpan Lifetime { get; } = TimeSpan.FromMinutes(15);
+        public static TimeSpan Lifetime { get; } = TimeSpan.FromMinutes(5);
 
         /// <summary>
         /// The <c>Content-Disposition</c> a link serves the blob with: <c>inline</c> for what a browser

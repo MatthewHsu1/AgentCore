@@ -1,3 +1,4 @@
+using AgentCore.Application.Blobs;
 using System.Text.Json;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Transcript;
@@ -16,7 +17,7 @@ namespace AgentCore.Application.Ports
         /// <inheritdoc cref="IConversationStore.GetAsync"/>
         ValueTask<ConversationRecord?> GetAsync(string conversationId, CancellationToken cancellationToken = default);
 
-        /// <summary>Reads one window of a conversation: its row, the newest turns before a given one, and a link to every file those turns kept.</summary>
+        /// <summary>Reads one window of a conversation: its row, the newest turns before a given one, and the facts of every file those turns kept.</summary>
         /// <param name="conversationId">The conversation to read.</param>
         /// <param name="window">Which turns: how many, and before which.</param>
         /// <param name="cancellationToken">Cancels the read.</param>
@@ -25,6 +26,19 @@ namespace AgentCore.Application.Ports
         /// <see langword="null"/> when the store holds no conversation under that id.
         /// </returns>
         ValueTask<StoredConversation?> LoadWindowAsync(string conversationId, TranscriptWindow window, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Makes a fresh, short-lived link to one file a conversation kept. Call it when the person asks for the file.
+        /// A host that proxies the bytes itself, or needs a different lifetime, goes through <see cref="IBlobStore"/> instead.
+        /// </summary>
+        /// <param name="conversationId">The conversation that owns the file. The caller has already checked who may read it.</param>
+        /// <param name="name">The file's name, as <see cref="StoredConversation.Files"/> lists it.</param>
+        /// <param name="cancellationToken">Cancels the lookup and the signing.</param>
+        /// <returns>
+        /// The URL, or <see langword="null"/> when the host opened no blob store, the conversation id fails
+        /// <see cref="BlobOwner.IsSafe"/> or the name fails <see cref="BlobName.IsSafe"/> (blank included; this never throws for either), the store holds no blob under that owner and name, or the store has no web door.
+        /// </returns>
+        ValueTask<Uri?> LinkFileAsync(string conversationId, string name, CancellationToken cancellationToken = default);
 
         /// <inheritdoc cref="IConversationStore.ListAsync"/>
         ValueTask<ConversationPage> ListAsync(

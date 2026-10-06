@@ -126,7 +126,7 @@ namespace AgentCore.Application.Tests.Tools
                 .LoadWindowAsync("conversation-1", new TranscriptWindow(null, 10), Ct);
 
             Assert.NotNull(stored);
-            Assert.Equal(["rows.csv"], stored.Files.Select(static link => link.Blob.Name));
+            Assert.Equal(["rows.csv"], stored.Files.Select(static file => file.Name));
             Assert.Equal(
                 ["rows.csv"],
                 stored.Messages.SelectMany(static message => message.Content.Contents).OfType<FileContent>().Select(static file => file.Name));

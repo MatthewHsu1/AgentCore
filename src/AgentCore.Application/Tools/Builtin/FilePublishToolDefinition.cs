@@ -17,8 +17,11 @@ namespace AgentCore.Application.Tools.Builtin
 
         /// <inheritdoc />
         public string DefaultDescription =>
-            "Hands one file from the workspace to the person and returns a link to it. "
-            + "A file that is not published is lost when the conversation ends.";
+            "Hands one file from the workspace to the person. "
+            + "A file that is not published is lost when the conversation ends. "
+            + "The result has a `link`. Link the file in your reply like [Sales by month](sandbox:/sales.csv), "
+            + "copying the `link` value exactly, with no angle brackets or other changes. Never write any other address for the file. "
+            + "Give each file a distinct name: a second file with the same name replaces the first.";
 
         /// <inheritdoc />
         public AITool Build(ToolConfiguration tool, BuiltinToolPorts ports)

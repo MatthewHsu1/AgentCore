@@ -55,7 +55,7 @@ namespace AgentCore.Application.Tests.Tools
 
             Assert.Equal(["publish"], childModel.Called);
             string result = Assert.Single(childModel.ToolResults);
-            Assert.Contains("https://blobs.test/conversation-9/rows.csv", result, StringComparison.Ordinal);
+            Assert.Contains("sandbox:/rows.csv", result, StringComparison.Ordinal);
             Assert.DoesNotContain(ToolErrorResult.ErrorProperty + "\":true", result, StringComparison.Ordinal);
             _ = Assert.Single(blobs.Blobs.Keys, key => key == ("conversation-9", "rows.csv"));
         }

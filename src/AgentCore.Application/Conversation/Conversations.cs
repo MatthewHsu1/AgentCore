@@ -45,7 +45,7 @@ namespace AgentCore.Application.Conversation
 
             IReadOnlyList<ConversationMessage> messages = await Store.ReadWindowAsync(conversationId, window, cancellationToken).ConfigureAwait(false);
 
-            IReadOnlyList<FileLink> files = await LinkFilesAsync(conversationId, messages.Select(message => message.Content), cancellationToken).ConfigureAwait(false);
+            IReadOnlyList<BlobRef> files = KeptFiles(conversationId, messages.Select(message => message.Content));
 
             int turns = messages.Select(message => message.TurnIndex).Distinct().Count();
 
@@ -55,15 +55,11 @@ namespace AgentCore.Application.Conversation
             };
         }
 
-        /// <summary>Links every published file the messages carry and the store kept, each name once, in first-seen order.</summary>
+        /// <summary>Lists every published file the messages carry and the store kept, each name once, in first-seen order.</summary>
         /// <param name="conversationId">The conversation that owns the files.</param>
         /// <param name="messages">The messages to read the references off: the stored transcript, or one turn's updates.</param>
-        /// <param name="cancellationToken">Cancels the signing.</param>
-        /// <returns>One link per kept file.</returns>
-        public async Task<IReadOnlyList<FileLink>> LinkFilesAsync(
-            string conversationId,
-            IEnumerable<ChatMessage> messages,
-            CancellationToken cancellationToken = default)
+        /// <returns>The facts of each kept file. The last mention of a name wins its place's facts.</returns>
+        internal IReadOnlyList<BlobRef> KeptFiles(string conversationId, IEnumerable<ChatMessage> messages)
         {
             ArgumentException.ThrowIfNullOrWhiteSpace(conversationId);
             ArgumentNullException.ThrowIfNull(messages);
@@ -95,15 +91,22 @@ namespace AgentCore.Application.Conversation
                 }
             }
 
-            List<FileLink> links = [];
+            return kept;
+        }
 
-            foreach (BlobRef blob in kept)
+        /// <inheritdoc />
+        public async ValueTask<Uri?> LinkFileAsync(string conversationId, string name, CancellationToken cancellationToken = default)
+        {
+            if (_blobs is null || !BlobOwner.IsSafe(conversationId) || !BlobName.IsSafe(name))
             {
-                Uri? url = await _blobs.LinkAsync(blob, BlobLink.Lifetime, cancellationToken).ConfigureAwait(false);
-                links.Add(new FileLink(blob, url));
+                return null;
             }
 
-            return links;
+            BlobRef? blob = await _blobs.StatAsync(conversationId, name, cancellationToken).ConfigureAwait(false);
+
+            return blob is null
+                ? null
+                : await _blobs.LinkAsync(blob, BlobLink.Lifetime, cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc />

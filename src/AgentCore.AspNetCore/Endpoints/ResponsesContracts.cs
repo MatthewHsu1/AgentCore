@@ -230,9 +230,6 @@ namespace AgentCore.AspNetCore.Endpoints
 
         /// <summary>Gets how many bytes it holds.</summary>
         public required long Length { get; init; }
-
-        /// <summary>Gets the link to fetch it from, or <see langword="null"/> when the store has no web door.</summary>
-        public string? Url { get; init; }
     }
 
     /// <summary>The ids one turn's commit wrote, as the browser reads it.</summary>
