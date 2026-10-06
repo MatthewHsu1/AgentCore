@@ -6,7 +6,6 @@ namespace AgentCore.Application.Hooks.BuiltIn
 {
     /// <summary>
     /// Adds an accepted call's brief to every run of the call's conversation, as instructions.
-    /// AgentCore never reads, wraps, or changes the brief; the host writes all of it.
     /// </summary>
     internal sealed class CallBriefHook : AgentHook
     {

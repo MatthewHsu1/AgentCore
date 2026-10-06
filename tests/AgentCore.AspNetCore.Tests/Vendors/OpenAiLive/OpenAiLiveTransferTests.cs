@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Conversation.Actions;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Tools;
 using AgentCore.Application.Tools.Binding;
@@ -34,7 +34,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         public async Task TheReferWaitsUntilTheAnswerWasHeardAndACloseEndsTheCallAsTransferred()
         {
             RecordingHook hook = new();
-            ConcurrentQueue<ConversationActionResult> answers = new();
+            ConcurrentQueue<ChannelCommandResult> answers = new();
             await using RunningLiveCall running = await RunningLiveCall.StartAsync(
                 new GatedToolCallingChatClient(), [hook], tools: TransferTool(answers), refers: true);
 
@@ -51,7 +51,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             await running.Loop;
             ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
 
-            Assert.Equal([ConversationActionResult.Scheduled], answers);
+            Assert.Equal([ChannelCommandResult.Scheduled], answers);
             Assert.False(referredBeforeSpeechStarted);
             Assert.Equal(Staff, target);
             Assert.False(running.HungUp.Task.IsCompleted);
@@ -153,7 +153,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         [Fact(Timeout = 30_000)]
         public async Task ACallWithNoReferAnswersATransferAsNotSupportedAndStaysUp()
         {
-            ConcurrentQueue<ConversationActionResult> answers = new();
+            ConcurrentQueue<ChannelCommandResult> answers = new();
             await using RunningLiveCall running = await RunningLiveCall.StartAsync(new GatedToolCallingChatClient(), [], tools: TransferTool(answers));
 
             running.Sideband.Push(Ask("item_1", "Can I talk to a person?", 1000));
@@ -161,16 +161,16 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             await running.Sideband.WaitForDrainAsync();
             running.Time.Advance(OpenAiLiveCall.EndQuietWait);
 
-            Assert.Equal([ConversationActionResult.NotSupported], answers);
+            Assert.Equal([ChannelCommandResult.NotSupported], answers);
             Assert.False(running.Call.HasEnded);
         }
 
         // Every tool of the harness's document asks for a transfer through the scope the binder fills, as a host's would.
-        private static Func<ToolConfiguration, AITool?> TransferTool(ConcurrentQueue<ConversationActionResult> answers, string? ifFailed = null) =>
+        private static Func<ToolConfiguration, AITool?> TransferTool(ConcurrentQueue<ChannelCommandResult> answers, string? ifFailed = null) =>
             tool => AIFunctionFactory.Create(
                 (ToolCallScope scope) =>
                 {
-                    ConversationActionResult answer = scope.Conversation.Request(new TransferAction(Staff) { IfFailed = ifFailed });
+                    ChannelCommandResult answer = scope.Channel.Send(new TransferCommand(Staff) { IfFailed = ifFailed });
                     answers.Enqueue(answer);
                     return answer.ToString();
                 },

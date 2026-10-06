@@ -24,6 +24,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
 
             return type switch
             {
+                OpenAiLiveEvents.Started => new LiveEvent.Started(),
                 OpenAiLiveEvents.InputTranscriptDelta => Transcript(root, Speaker.Caller, type),
                 OpenAiLiveEvents.OutputTranscriptDelta => Transcript(root, Speaker.Agent, type),
                 OpenAiLiveEvents.DelegationCreated => root.TryGetProperty("delegation", out JsonElement delegation) && Text(delegation, "id") is { Length: > 0 } id

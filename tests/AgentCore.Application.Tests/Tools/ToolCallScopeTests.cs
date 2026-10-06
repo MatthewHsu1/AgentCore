@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
 using AgentCore.Application.Configuration.Compilation;
-using AgentCore.Application.Conversation.Actions;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
@@ -63,16 +63,16 @@ namespace AgentCore.Application.Tests.Tools
         [Fact]
         public async Task ABoundToolAsksItsOwnConversationForAnActionThroughTheScope()
         {
-            List<ConversationActionResult> answers = [];
+            List<ChannelCommandResult> answers = [];
             ToolBindingRegistry bindings = new();
             _ = bindings.Register(
                 "RequestHuman",
-                (string reason, ToolCallScope scope) => answers.Add(scope.Conversation.Request(new EndConversationAction(ConversationEndReason.TransferredToHuman))));
+                (string reason, ToolCallScope scope) => answers.Add(scope.Channel.Send(new EndCommand(ConversationEndReason.TransferredToHuman))));
             ConversationSession session = await CreateAsync(bindings, "conversation-scope-2");
 
             _ = await session.RunTurnAsync("I need a person", TestContext.Current.CancellationToken);
 
-            Assert.Equal(ConversationActionResult.Scheduled, Assert.Single(answers));
+            Assert.Equal(ChannelCommandResult.Scheduled, Assert.Single(answers));
             Assert.True(session.IsComplete);
         }
 

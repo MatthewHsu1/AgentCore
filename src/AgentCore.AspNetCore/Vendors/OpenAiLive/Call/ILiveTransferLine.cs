@@ -1,3 +1,5 @@
+using AgentCore.Application.Conversation.Commands;
+
 namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 {
     /// <summary>
@@ -6,10 +8,10 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
     /// </summary>
     internal interface ILiveTransferLine
     {
-        /// <param name="target">The line.</param>
+        /// <param name="transfer">The command, as the tool sent it.</param>
         /// <param name="peer">Waits for the peer to close the AI leg, for a line whose only sign of success is that close.</param>
         /// <param name="receiving">The read loop's receive still open, or <see langword="null"/>.</param>
         /// <param name="cancellationToken">Cancels the hand-over.</param>
-        Task<LiveHandover> HandOverAsync(Uri target, LivePeerClose peer, Task<string?>? receiving, CancellationToken cancellationToken);
+        Task<LiveHandover> HandOverAsync(TransferCommand transfer, LivePeerClose peer, Task<string?>? receiving, CancellationToken cancellationToken);
     }
 }

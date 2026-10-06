@@ -161,6 +161,7 @@ namespace AgentCore.AspNetCore.Calls
 
                 _keptStart = kept;
                 Volatile.Write(ref _session, session);
+                Channel.Follow(session);
             }
 
             // ConversationStarted is raised when the store opens, so it always comes before CallStarted.

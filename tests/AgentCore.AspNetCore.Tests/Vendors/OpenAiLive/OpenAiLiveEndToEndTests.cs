@@ -26,7 +26,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             int delegation = LiveLog.IndexOf(log, OpenAiLiveEvents.DelegationCreated);
 
             sideband.Push(log.Take(delegation + 1));
-            JsonObject commentary = await sideband.WaitForSentAsync(sent => (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend);
+            JsonObject commentary = await sideband.WaitForSentAsync(LiveSent.IsCommentary);
             sideband.Push(log.Skip(delegation + 1));
             ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
 

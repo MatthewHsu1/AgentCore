@@ -70,12 +70,20 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         };
 
         /// <summary>
-        /// The event that makes GPT-Live greet the caller instead of waiting for the caller's voice: instructions with no
-        /// delegation, from OpenAI's live-conversations guide. A real SIP call without it stayed silent until the caller spoke.
+        /// The event that makes GPT-Live greet the caller instead of waiting for the caller's voice: speakable commentary
+        /// with no delegation. A real SIP call without it stayed silent until the caller spoke. OpenAI's live-conversations
+        /// guide sends the greeting as instructions, but GPT-Live spoke those in only 5 of 10 probe sessions (2026-10-06);
+        /// commentary, in 8 of 8, within about a second.
         /// </summary>
-        internal static JsonObject GreetFirst(string eventId, string greeting) => SessionFact(eventId, greeting);
+        internal static JsonObject GreetFirst(string eventId, string greeting) => new()
+        {
+            ["type"] = OpenAiLiveEvents.CommentaryAppend,
+            ["event_id"] = eventId,
+            ["delegation_id"] = null,
+            ["content"] = greeting,
+        };
 
-        /// <summary>Words GPT-Live says at once, outside every delegation: the event that makes it greet first.</summary>
+        /// <summary>Words GPT-Live says at once, outside every delegation.</summary>
         internal static JsonObject SayNow(string eventId, string words) => SessionFact(eventId, words);
 
         /// <summary>

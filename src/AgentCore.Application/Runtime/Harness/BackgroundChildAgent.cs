@@ -55,7 +55,7 @@ namespace AgentCore.Application.Runtime.Harness
                 TimeZone = parent.TimeZone,
                 ToolStop = parent.ToolStop,
                 ToolRuns = parent.ToolRuns,
-                Control = parent.Control,
+                Channel = parent.Channel,
                 Nested = true,
             };
         }

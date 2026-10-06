@@ -60,6 +60,7 @@ namespace AgentCore.Application.Hooks.Gates
             ArgumentException.ThrowIfNullOrEmpty(conversationId);
 
             string? kept = brief is { Length: > MaxBriefLength } ? brief[..MaxBriefLength] : brief;
+
             Stage(terminal: true, () =>
             {
                 AcceptedConversationId = conversationId;

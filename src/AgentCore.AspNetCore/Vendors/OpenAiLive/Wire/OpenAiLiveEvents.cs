@@ -8,6 +8,8 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
     /// </summary>
     internal static class OpenAiLiveEvents
     {
+        internal const string Started = "session.started";
+
         internal const string InputTranscriptDelta = "session.input_transcript.delta";
 
         internal const string OutputTranscriptDelta = "session.output_transcript.delta";
@@ -23,17 +25,35 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         internal const string Closed = "session.closed";
 
         /// <summary>Silent context for the open delegation.</summary>
-        internal static JsonObject Thinking(string delegationId, string content, string eventId) => Append(ThinkingAppend, delegationId, content, eventId);
+        internal static JsonObject Thinking(string delegationId, string content, string eventId)
+        {
+            return Append(ThinkingAppend, delegationId, content, eventId);
+        }
+
+        /// <summary>
+        /// Silent context for the whole session, under no delegation. In a probe it never made GPT-Live speak or cut its
+        /// speech; <c>session.instructions.append</c> cut the greeting (docs/probes/live-late-brief).
+        /// </summary>
+        internal static JsonObject SessionThinking(string content, string eventId)
+        {
+            return Append(ThinkingAppend, delegationId: null, content, eventId);
+        }
 
         /// <summary>Words GPT-Live speaks for the open delegation, lightly paraphrased. At most 500 tokens.</summary>
-        internal static JsonObject Commentary(string delegationId, string content, string eventId) => Append(CommentaryAppend, delegationId, content, eventId);
-
-        private static JsonObject Append(string type, string delegationId, string content, string eventId) => new()
+        internal static JsonObject Commentary(string delegationId, string content, string eventId)
         {
-            ["type"] = type,
-            ["delegation_id"] = delegationId,
-            ["content"] = content,
-            ["event_id"] = eventId,
-        };
+            return Append(CommentaryAppend, delegationId, content, eventId);
+        }
+
+        private static JsonObject Append(string type, string? delegationId, string content, string eventId)
+        {
+            return new()
+            {
+                ["type"] = type,
+                ["delegation_id"] = delegationId,
+                ["content"] = content,
+                ["event_id"] = eventId,
+            };
+        }
     }
 }

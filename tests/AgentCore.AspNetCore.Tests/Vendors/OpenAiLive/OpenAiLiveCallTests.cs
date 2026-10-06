@@ -145,20 +145,38 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Equal((ConversationEndReason.Faulted, "sideband_failed"), (ended.Reason, ended.Call!.Cause));
         }
 
-        // GPT-Live waits for the caller's voice unless it is told to speak first (OpenAI's live-conversations guide):
-        // the configured greeting as a session.instructions.append with no delegation, before anything else.
+        // GPT-Live waits for the caller's voice unless it is told to speak first. The configured greeting goes out before
+        // anything else as speakable commentary with no delegation: sent as session instructions, GPT-Live spoke it in
+        // only 5 of 10 probe sessions (2026-10-06); as commentary, in 8 of 8, within about a second.
         [Fact(Timeout = 30_000)]
         public async Task TheCallTellsGptLiveToGreetTheCallerFirst()
         {
             await using RunningLiveCall running = await RunningLiveCall.StartAsync(new StallOnCueChatClient(), [], EndsAfterTheFirstAskYaml);
 
-            JsonObject greet = await running.Sideband.WaitForSentAsync(sent => (string?)sent["type"] == "session.instructions.append");
+            JsonObject greet = await running.Sideband.WaitForSentAsync(sent => (string?)sent["content"] == RunningLiveCall.Greeting);
 
             Assert.Same(greet, running.Sideband.Sent[0]);
+            Assert.Equal(OpenAiLiveEvents.CommentaryAppend, (string?)greet["type"]);
             Assert.True(greet.ContainsKey("delegation_id"));
             Assert.Null(greet["delegation_id"]);
             Assert.Equal(RunningLiveCall.Greeting, (string?)greet["content"]);
             Assert.False(string.IsNullOrWhiteSpace((string?)greet["event_id"]));
+        }
+
+        // OpenAI's live-conversations guide: "send greeting instructions after session.started". Instructions sent
+        // before it may land in a session that is not ready; a real call reported context_injection_incomplete.
+        [Fact(Timeout = 30_000)]
+        public async Task TheGreetingWaitsForTheSessionToStart()
+        {
+            await using RunningLiveCall running = await RunningLiveCall.StartAsync(new StallOnCueChatClient(), [], started: false);
+            await running.Sideband.WaitForDrainAsync();
+            bool sentBeforeTheStart = running.Sideband.Sent.Count > 0;
+
+            running.Sideband.Push([RunningLiveCall.Started, RunningLiveCall.Started]);
+            await running.Sideband.WaitForDrainAsync();
+
+            Assert.False(sentBeforeTheStart);
+            Assert.Single(running.Sideband.Sent, sent => (string?)sent["content"] == RunningLiveCall.Greeting);
         }
 
         // A call whose conversation a newer call took is hung up, and says nothing.

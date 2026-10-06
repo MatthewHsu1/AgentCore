@@ -3,7 +3,7 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Conversation.Actions;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Policy;
@@ -103,7 +103,7 @@ namespace AgentCore.Application.Runtime.Session
 
         internal FinishedToolPairs ToolPairs { get; }
 
-        internal ConversationActions Actions { get; }
+        internal ChannelCommands Commands { get; }
 
         /// <summary>
         /// Creates the session of one conversation.
@@ -146,7 +146,7 @@ namespace AgentCore.Application.Runtime.Session
             Busy = new ConversationBusyMark(this);
             ToolPairs = new FinishedToolPairs(this);
             ToolRuns = new ConversationToolRuns(ToolPairs.Keep);
-            Actions = new ConversationActions(this);
+            Commands = new ChannelCommands(this);
         }
 
         /// <summary>
@@ -354,10 +354,10 @@ namespace AgentCore.Application.Runtime.Session
             return Lifetime.EndConversation(reason);
         }
 
-        /// <inheritdoc cref="IConversationControl.Request"/>
-        public ConversationActionResult Request(ConversationAction action)
+        /// <inheritdoc cref="IChannelControl.Send"/>
+        public ChannelCommandResult Send(ChannelCommand command)
         {
-            return Actions.Request(action);
+            return Commands.Send(command);
         }
 
         /// <summary>

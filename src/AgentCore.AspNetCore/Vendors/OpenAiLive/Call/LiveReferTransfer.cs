@@ -1,3 +1,4 @@
+using AgentCore.Application.Conversation.Commands;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
@@ -9,12 +10,12 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
     /// </summary>
     internal sealed class LiveReferTransfer(Func<Uri, CancellationToken, Task<bool>> refer, TimeSpan wait, ILogger logger, string callId) : ILiveTransferLine
     {
-        public async Task<LiveHandover> HandOverAsync(Uri target, LivePeerClose peer, Task<string?>? receiving, CancellationToken cancellationToken)
+        public async Task<LiveHandover> HandOverAsync(TransferCommand transfer, LivePeerClose peer, Task<string?>? receiving, CancellationToken cancellationToken)
         {
             bool sent;
             try
             {
-                sent = await refer(target, cancellationToken).ConfigureAwait(false);
+                sent = await refer(transfer.Target, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception fault) when (fault is not OperationCanceledException)
             {
@@ -28,6 +29,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
             }
 
             (bool closed, receiving) = await peer.WaitAsync(wait, receiving, cancellationToken).ConfigureAwait(false);
+
             return closed
                 ? new LiveHandover(LiveHandoverOutcome.TakenAndClosed, null)
                 : new LiveHandover(LiveHandoverOutcome.NotTaken, receiving, "the call was still up when the transfer wait ran out");

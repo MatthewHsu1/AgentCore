@@ -1,4 +1,4 @@
-using AgentCore.Application.Conversation.Actions;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Tools
@@ -17,9 +17,10 @@ namespace AgentCore.Application.Tools
         public IDictionary<string, object?>? Items { get; init; }
 
         /// <summary>
-        /// Gets the conversation's action door. It sits on the scope because the binder already hands every tool the
-        /// scope, so a tool needs no new parameter. Outside a turn it refuses every action: there is no conversation.
+        /// Gets the door to the conversation's live channel, its call or its chat connection. It sits on the scope because
+        /// the binder already hands every tool the scope, so a tool needs no new parameter. Outside a turn it refuses
+        /// every command: there is no conversation.
         /// </summary>
-        public IConversationControl Conversation { get; init; } = UnattachedConversationControl.Instance;
+        public IChannelControl Channel { get; init; } = UnattachedChannel.Instance;
     }
 }

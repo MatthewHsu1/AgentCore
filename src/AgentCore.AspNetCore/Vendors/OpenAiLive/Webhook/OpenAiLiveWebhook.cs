@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Hooks.Gates;
 using AgentCore.Application.Hooks.Layers;
 using AgentCore.AspNetCore.Calls;
@@ -49,6 +50,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
             string? webhookId = Header(http, "webhook-id");
 
             http.Response.StatusCode = StatusCodes.Status200OK;
+
             if (!calls.TryClaimWebhook(webhookId!, time.GetUtcNow())
                 || OpenAiLiveWire.ReadIncomingCall(body) is not { } incoming
                 || !calls.TryClaimCall(incoming.CallId))
@@ -95,6 +97,10 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
                 return false;
             }
 
+            // Attached before the call starts, so a command a hook sends from CallStarted on reaches the call.
+            LiveChannel channel = new(incoming.CallId, logger);
+            call.Channel.Use(channel, call.Session);
+
             if (!await AcceptAndStartAsync(call, incoming.CallId, logger, stopping).ConfigureAwait(false))
             {
                 return false;
@@ -108,23 +114,29 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
             catch (Exception fault) when (fault is not OutOfMemoryException)
             {
                 OpenAiLiveLog.AttachFailed(logger, incoming.CallId, fault);
+
                 await HangUpAsync(incoming.CallId, logger).ConfigureAwait(false);
+
                 await call.EndAsync(ConversationEndReason.Faulted, OpenAiLiveCall.AttachFailedCause).ConfigureAwait(false);
+
                 await call.CloseAsync().ConfigureAwait(false);
+
                 return false;
             }
 
-            ILiveTransferLine transferLine = calls.HostTransfer is { } hostTransfer
+            ILiveTransferLine transferLine = host.HandlerFor<TransferCommand, CallTransferOutcome>() is { } hostTransfer
                 ? new LiveHostTransfer(hostTransfer, call.ConversationId, incoming.Headers, logger, incoming.CallId)
                 : new LiveReferTransfer((target, token) => control.ReferAsync(incoming.CallId, target, token), settings.TransferWait, logger, incoming.CallId);
 
             calls.Run(new OpenAiLiveCall(
                 call,
+                channel,
                 sideband,
                 _ => control.HangupQuietlyAsync(incoming.CallId),
                 logger,
                 settings.Greeting,
                 transferLine));
+
             return true;
         }
 
@@ -141,7 +153,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
                 }
 
                 await call.StartAsync(stopping).ConfigureAwait(false);
+
                 started = true;
+
                 return true;
             }
             catch (Exception)
@@ -149,6 +163,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
                 // A thrown accept may still have landed, and a failed start follows an accept that did: either way
                 // GPT-Live would be left with a call and no sideband.
                 await HangUpAsync(callId, logger).ConfigureAwait(false);
+
                 throw;
             }
             finally
@@ -166,12 +181,14 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
                 callId,
                 OpenAiLiveWire.AcceptBody(settings.Model, settings.Voice, LiveInstructions.Build(settings.Instructions, call.Brief)),
                 stopping).ConfigureAwait(false);
+
             if (outcome == AcceptOutcome.Accepted)
             {
                 return true;
             }
 
             OpenAiLiveLog.AcceptRefused(logger, callId, outcome);
+
             if (outcome == AcceptOutcome.Failed && !await control.RejectQuietlyAsync(callId, CallRefusal.Unavailable).ConfigureAwait(false))
             {
                 OpenAiLiveLog.RejectFailed(logger, callId);
@@ -188,18 +205,22 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
             }
         }
 
-        private static string? Header(HttpContext http, string name) =>
-            http.Request.Headers.TryGetValue(name, out StringValues value) ? value.ToString() : null;
+        private static string? Header(HttpContext http, string name)
+        {
+            return http.Request.Headers.TryGetValue(name, out StringValues value) ? value.ToString() : null;
+        }
 
         /// <summary>Leaves the body buffered, because <see cref="HandleAsync"/> reads it again.</summary>
         internal async ValueTask<bool> IsOpenAiAsync(HttpContext http)
         {
             OpenAiLiveCredentials keys = await credentials.ConfigureAwait(false);
+
             http.Request.EnableBuffering();
             byte[]? body = await ReadBodyAsync(http.Request, http.RequestAborted).ConfigureAwait(false);
             http.Request.Body.Position = 0;
 
             TimeProvider time = http.RequestServices.GetRequiredService<TimeProvider>();
+
             if (body is not null
                 && StandardWebhookSignature.Verify(keys.WebhookKey, Header(http, "webhook-id"), Header(http, "webhook-timestamp"), body, Header(http, "webhook-signature"), time.GetUtcNow()))
             {
@@ -207,6 +228,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
             }
 
             OpenAiLiveLog.SignatureRefused(http.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("AgentCore.OpenAiLive"));
+
             return false;
         }
 
@@ -215,6 +237,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
             using MemoryStream body = new();
             byte[] buffer = new byte[8192];
             int read;
+
             while ((read = await request.Body.ReadAsync(buffer, cancellationToken).ConfigureAwait(false)) > 0)
             {
                 if (body.Length + read > MaxBodyBytes)

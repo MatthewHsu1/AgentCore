@@ -9,6 +9,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         {
         }
 
+        /// <summary>The session is ready for session-wide instructions.</summary>
+        internal sealed record Started : LiveEvent;
+
         /// <summary>A piece of what one side said. Times are milliseconds from the session's start; <c>start_ms</c> of the last word, not its end.</summary>
         internal sealed record Transcript(Speaker Speaker, string Delta, int StartMs, int EndMs) : LiveEvent;
 
