@@ -22,8 +22,10 @@ namespace AgentCore.Application.Hooks.BuiltIn
         public override TimeSpan? NoticeTimeout => null;
 
         /// <inheritdoc />
-        public override ValueTask OnConversationStartedAsync(ConversationStarted notice, CancellationToken cancellationToken) =>
-            AppendAsync(notice, AuditEventKind.ConversationStarted, NoPayload, amends: null, cancellationToken);
+        public override ValueTask OnConversationStartedAsync(ConversationStarted notice, CancellationToken cancellationToken)
+        {
+            return AppendAsync(notice, AuditEventKind.ConversationStarted, NoPayload, amends: null, cancellationToken);
+        }
 
         /// <inheritdoc />
         public override ValueTask OnConversationEndedAsync(ConversationEnded notice, CancellationToken cancellationToken)
@@ -38,32 +40,39 @@ namespace AgentCore.Application.Hooks.BuiltIn
         }
 
         /// <inheritdoc />
-        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken) =>
-            !AuditRules.IsAudited(notice)
+        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken)
+        {
+            return !AuditRules.IsAudited(notice)
                 ? ValueTask.CompletedTask
                 : AppendAsync(notice, AuditEventKind.TurnRefused,
                     new Dictionary<string, string>(StringComparer.Ordinal) { [AuditPayloadKeys.RefusedReason] = TurnRefusalTokens.ToToken(notice.Reason) },
                     amends: null, cancellationToken);
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnTurnSupersededAsync(TurnSuperseded notice, CancellationToken cancellationToken) =>
-            AppendAsync(notice, AuditEventKind.TurnSuperseded, new Dictionary<string, string>(StringComparer.Ordinal)
+        public override ValueTask OnTurnSupersededAsync(TurnSuperseded notice, CancellationToken cancellationToken)
+        {
+            return AppendAsync(notice, AuditEventKind.TurnSuperseded, new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.WithdrewFromTurnIndex] = notice.WithdrewFrom.ToString(CultureInfo.InvariantCulture),
                 [AuditPayloadKeys.WithdrewThroughTurnIndex] = notice.WithdrewThrough.ToString(CultureInfo.InvariantCulture),
             }, amends: null, cancellationToken);
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnInputModeratedAsync(InputModerated notice, CancellationToken cancellationToken) =>
-            !AuditRules.IsAudited(notice)
+        public override ValueTask OnInputModeratedAsync(InputModerated notice, CancellationToken cancellationToken)
+        {
+            return !AuditRules.IsAudited(notice)
                 ? ValueTask.CompletedTask
                 : AppendAsync(notice, AuditEventKind.PromptFlagged,
                     new Dictionary<string, string>(StringComparer.Ordinal) { [AuditPayloadKeys.ModerationCategories] = string.Join(',', notice.Categories) },
                     amends: null, cancellationToken);
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnToolCalledAsync(ToolCalled notice, CancellationToken cancellationToken) =>
-            !AuditRules.IsAudited(notice)
+        public override ValueTask OnToolCalledAsync(ToolCalled notice, CancellationToken cancellationToken)
+        {
+            return !AuditRules.IsAudited(notice)
                 ? ValueTask.CompletedTask
                 : AppendAsync(notice, AuditEventKind.ToolFailed, new Dictionary<string, string>(StringComparer.Ordinal)
                 {
@@ -72,15 +81,18 @@ namespace AgentCore.Application.Hooks.BuiltIn
                     [AuditPayloadKeys.ToolFailureKind] = ToolFailureKinds.ToToken(notice.FailureKind ?? ToolFailureKind.Faulted),
                     [AuditPayloadKeys.ToolError] = notice.Failure ?? string.Empty,
                 }, amends: null, cancellationToken);
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken) =>
-            AppendAsync(notice, AuditEventKind.TurnCompleted, new Dictionary<string, string>(StringComparer.Ordinal)
+        public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken)
+        {
+            return AppendAsync(notice, AuditEventKind.TurnCompleted, new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 [AuditPayloadKeys.ReplyTextSha256] = AuditHash.OfText(notice.ReplyText).Value,
                 [AuditPayloadKeys.StageBefore] = notice.StageBefore,
                 [AuditPayloadKeys.StageAfter] = notice.StageAfter,
             }, amends: null, cancellationToken);
+        }
 
         /// <inheritdoc />
         public override ValueTask OnReplyCutAsync(ReplyCut notice, CancellationToken cancellationToken)

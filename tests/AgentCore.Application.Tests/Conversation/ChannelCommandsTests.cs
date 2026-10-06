@@ -76,7 +76,7 @@ namespace AgentCore.Application.Tests.Conversation
             session.Commands.Attach(newer);
 
             Assert.Equal(ChannelCommandResult.Scheduled, session.Send(new TransferCommand(Staff)));
-            Assert.Single(newer.Seen);
+            _ = Assert.Single(newer.Seen);
             Assert.Empty(older.Seen);
         }
 

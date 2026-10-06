@@ -1,5 +1,4 @@
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;
@@ -54,7 +53,7 @@ namespace AgentCore.Application.Tests.Runtime
             Task<List<AgentResponseUpdate>> drain = h.DrainAsync(second);
             await model.Gated.Task.WaitAsync(Ct);
             _ = second.Slot.TryCut(new TurnCut(string.Empty, null));
-            model.Release.TrySetResult();
+            _ = model.Release.TrySetResult();
             _ = await drain;
 
             // Assert

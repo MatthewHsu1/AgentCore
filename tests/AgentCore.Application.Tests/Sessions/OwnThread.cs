@@ -10,7 +10,9 @@ namespace AgentCore.Application.Tests.Sessions
         /// <param name="open">The open to run.</param>
         /// <param name="cancellationToken">Cancels the start.</param>
         /// <returns>The task of the open.</returns>
-        internal static Task<T> Run<T>(Func<Task<T>> open, CancellationToken cancellationToken) =>
-            Task.Factory.StartNew(open, cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
+        internal static Task<T> Run<T>(Func<Task<T>> open, CancellationToken cancellationToken)
+        {
+            return Task.Factory.StartNew(open, cancellationToken, TaskCreationOptions.LongRunning, TaskScheduler.Default).Unwrap();
+        }
     }
 }

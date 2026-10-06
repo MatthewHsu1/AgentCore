@@ -137,9 +137,14 @@ namespace AgentCore.Application.Tests.Runtime
             }
 
             public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
-                => throw new TaskCanceledException("HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException());
+            {
+                throw new TaskCanceledException("HttpClient.Timeout of 100 seconds elapsing.", new TimeoutException());
+            }
 
-            public object? GetService(Type serviceType, object? serviceKey = null) => null;
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return null;
+            }
 
             public void Dispose()
             {

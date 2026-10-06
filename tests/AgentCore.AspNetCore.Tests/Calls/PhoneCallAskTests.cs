@@ -316,7 +316,7 @@ namespace AgentCore.AspNetCore.Tests.Calls
                 price.Release.SetResult();
 
                 Assert.Equal(CallAnswer.Answered("done."), await newer);
-                Assert.Single(
+                _ = Assert.Single(
                     call.Session.Transcript.SelectMany(message => message.Contents).OfType<FunctionResultContent>(),
                     result => result.Result?.ToString() == "{\"stock\":3}");
             }
@@ -350,13 +350,20 @@ namespace AgentCore.AspNetCore.Tests.Calls
             }
         }
 
-        private static ValueTask NoTools(string name) => default;
+        private static ValueTask NoTools(string name)
+        {
+            return default;
+        }
 
-        private static List<(string Role, string? Author, string Text)> Spoken(IEnumerable<ChatMessage> messages) =>
-            [.. messages.Where(message => message.Role != ChatRole.System).Select(message => (message.Role.Value, message.AuthorName, message.Text))];
+        private static List<(string Role, string? Author, string Text)> Spoken(IEnumerable<ChatMessage> messages)
+        {
+            return [.. messages.Where(message => message.Role != ChatRole.System).Select(message => (message.Role.Value, message.AuthorName, message.Text))];
+        }
 
-        private static List<string> UserWords(IReadOnlyList<ChatMessage> request) =>
-            [.. request.Where(message => message.Role == ChatRole.User).Select(message => message.Text)];
+        private static List<string> UserWords(IReadOnlyList<ChatMessage> request)
+        {
+            return [.. request.Where(message => message.Role == ChatRole.User).Select(message => message.Text)];
+        }
 
         private static async Task<(PhoneCallHarness Harness, PhoneCall Call)> StartedAsync(
             IChatClient model,

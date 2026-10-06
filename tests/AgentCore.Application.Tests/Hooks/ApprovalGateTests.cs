@@ -5,7 +5,6 @@ using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Hooks.Gates;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Application.Tests.Sessions;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
@@ -191,10 +190,15 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class FailsClosed : AgentHook
         {
-            public override HookFailure FailureFor(GatePoint point) => HookFailure.Closed;
+            public override HookFailure FailureFor(GatePoint point)
+            {
+                return HookFailure.Closed;
+            }
 
-            public override ValueTask BeforeToolApprovalAsync(ApprovalGate gate, CancellationToken cancellationToken) =>
+            public override ValueTask BeforeToolApprovalAsync(ApprovalGate gate, CancellationToken cancellationToken)
+            {
                 throw new InvalidOperationException("policy store down");
+            }
         }
     }
 }

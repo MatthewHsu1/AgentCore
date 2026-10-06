@@ -1,4 +1,3 @@
-using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Domain;

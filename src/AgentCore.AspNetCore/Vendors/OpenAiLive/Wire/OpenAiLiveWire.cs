@@ -25,16 +25,31 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         internal static readonly FrozenSet<string> IncomingCallEvents = FrozenSet.ToFrozenSet(["live.transport.incoming", "realtime.call.incoming"], StringComparer.Ordinal);
 
         // URLs as the GPT-Live docs give them.
-        internal static string AcceptPath(string callId) => $"v1/live/sessions/{Uri.EscapeDataString(callId)}/accept";
+        internal static string AcceptPath(string callId)
+        {
+            return $"v1/live/sessions/{Uri.EscapeDataString(callId)}/accept";
+        }
 
-        internal static string RejectPath(string callId) => $"v1/live/sessions/{Uri.EscapeDataString(callId)}/reject";
+        internal static string RejectPath(string callId)
+        {
+            return $"v1/live/sessions/{Uri.EscapeDataString(callId)}/reject";
+        }
 
-        internal static string HangupPath(string callId) => $"v1/live/sessions/{Uri.EscapeDataString(callId)}/hangup";
+        internal static string HangupPath(string callId)
+        {
+            return $"v1/live/sessions/{Uri.EscapeDataString(callId)}/hangup";
+        }
 
         // Proven on a real call (probe T1): the peer gets an in-dialog REFER with Refer-To set to the target.
-        internal static string ReferPath(string callId) => $"v1/live/sessions/{Uri.EscapeDataString(callId)}/refer";
+        internal static string ReferPath(string callId)
+        {
+            return $"v1/live/sessions/{Uri.EscapeDataString(callId)}/refer";
+        }
 
-        internal static JsonObject ReferBody(Uri target) => new() { ["target_uri"] = target.OriginalString };
+        internal static JsonObject ReferBody(Uri target)
+        {
+            return new() { ["target_uri"] = target.OriginalString };
+        }
 
         internal static Uri AttachUri(Uri apiBase, string callId)
         {
@@ -47,27 +62,33 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         }
 
         /// <summary>The SIP status a refusal is rejected with.</summary>
-        internal static int SipStatusOf(CallRefusal refusal) => refusal switch
+        internal static int SipStatusOf(CallRefusal refusal)
         {
-            CallRefusal.Declined => 603,
-            CallRefusal.Busy => 486,
-            _ => 503,
-        };
+            return refusal switch
+            {
+                CallRefusal.Declined => 603,
+                CallRefusal.Busy => 486,
+                _ => 503,
+            };
+        }
 
         /// <summary>
         /// The accept body: the proven <c>session.start</c> session shape from the probe logs, as the only field of the
         /// body. A real SIP call proved the wrapper: a flat body is refused with "session must be the only field".
         /// </summary>
-        internal static JsonObject AcceptBody(string model, string voice, string instructions) => new()
+        internal static JsonObject AcceptBody(string model, string voice, string instructions)
         {
-            ["session"] = new JsonObject
+            return new()
             {
-                ["model"] = model,
-                ["instructions"] = instructions,
-                ["audio"] = new JsonObject { ["output"] = new JsonObject { ["voice"] = voice } },
-                ["delegation"] = new JsonObject { ["type"] = "client" },
-            },
-        };
+                ["session"] = new JsonObject
+                {
+                    ["model"] = model,
+                    ["instructions"] = instructions,
+                    ["audio"] = new JsonObject { ["output"] = new JsonObject { ["voice"] = voice } },
+                    ["delegation"] = new JsonObject { ["type"] = "client" },
+                },
+            };
+        }
 
         /// <summary>
         /// The event that makes GPT-Live greet the caller instead of waiting for the caller's voice: speakable commentary
@@ -75,30 +96,42 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
         /// guide sends the greeting as instructions, but GPT-Live spoke those in only 5 of 10 probe sessions (2026-10-06);
         /// commentary, in 8 of 8, within about a second.
         /// </summary>
-        internal static JsonObject GreetFirst(string eventId, string greeting) => new()
+        internal static JsonObject GreetFirst(string eventId, string greeting)
         {
-            ["type"] = OpenAiLiveEvents.CommentaryAppend,
-            ["event_id"] = eventId,
-            ["delegation_id"] = null,
-            ["content"] = greeting,
-        };
+            return new()
+            {
+                ["type"] = OpenAiLiveEvents.CommentaryAppend,
+                ["event_id"] = eventId,
+                ["delegation_id"] = null,
+                ["content"] = greeting,
+            };
+        }
 
         /// <summary>Words GPT-Live says at once, outside every delegation.</summary>
-        internal static JsonObject SayNow(string eventId, string words) => SessionFact(eventId, words);
+        internal static JsonObject SayNow(string eventId, string words)
+        {
+            return SessionFact(eventId, words);
+        }
 
         /// <summary>
         /// A fact for the whole session, under no delegation, from OpenAI's delegation guide: at most 500 tokens, such as
         /// <c>"The current date is December 10, 2024. Today is Tuesday."</c>
         /// </summary>
-        internal static JsonObject SessionFact(string eventId, string content) => new()
+        internal static JsonObject SessionFact(string eventId, string content)
         {
-            ["type"] = "session.instructions.append",
-            ["event_id"] = eventId,
-            ["delegation_id"] = null,
-            ["content"] = content,
-        };
+            return new()
+            {
+                ["type"] = "session.instructions.append",
+                ["event_id"] = eventId,
+                ["delegation_id"] = null,
+                ["content"] = content,
+            };
+        }
 
-        internal static JsonObject RejectBody(CallRefusal refusal) => new() { ["status_code"] = SipStatusOf(refusal) };
+        internal static JsonObject RejectBody(CallRefusal refusal)
+        {
+            return new() { ["status_code"] = SipStatusOf(refusal) };
+        }
 
         /// <summary>Reads an incoming-call webhook body: <c>{ type, data: { call_id | session_id, sip_headers: [ { name, value } ] } }</c>.</summary>
         /// <returns>The call, or <see langword="null"/> for any other event or a body that is not one.</returns>
@@ -161,9 +194,11 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
             return user.Length == 0 ? null : user;
         }
 
-        private static string? Text(JsonElement element, string name) =>
-            element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+        private static string? Text(JsonElement element, string name)
+        {
+            return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+        }
     }
 }

@@ -16,7 +16,10 @@ namespace AgentCore.Application.Tests.Hooks
 
         // The agent's own instructions come first and the brief follows on a new line, so a brief that arrives
         // untouched, with its edge spaces, is exactly what the instructions end with after that line break.
-        private static bool EndsWithTheBrief(string instructions) => instructions.EndsWith("\n" + Brief, StringComparison.Ordinal);
+        private static bool EndsWithTheBrief(string instructions)
+        {
+            return instructions.EndsWith("\n" + Brief, StringComparison.Ordinal);
+        }
 
         // Instructions a run gate adds reach every round of the run.
         [Fact]

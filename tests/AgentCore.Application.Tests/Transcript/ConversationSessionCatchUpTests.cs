@@ -130,7 +130,7 @@ namespace AgentCore.Application.Tests.Transcript
 
             Exception? refused = await Record.ExceptionAsync(() => a.RunTurnAsync("q2", Ct));
 
-            Assert.IsType<InvalidOperationException>(refused);
+            _ = Assert.IsType<InvalidOperationException>(refused);
             IReadOnlyList<ConversationMessage> rows = await store.ReadForSessionAsync(a.ConversationId, Ct);
             Assert.Equal(4, rows.Count);
         }

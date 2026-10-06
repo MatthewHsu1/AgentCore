@@ -68,11 +68,11 @@ namespace AgentCore.Application.Sessions.Memory
             // No margin for clock skew: a root shared by several servers is the host's to coordinate.
             DateTime cutoff = _time.GetUtcNow().UtcDateTime - _idleTimeout;
 
-            HashSet<string> liveFolderNames = new(folders.Select(folder => Path.GetFileName(folder)!), StringComparer.Ordinal);
+            HashSet<string> liveFolderNames = new(folders.Select(folder => Path.GetFileName(folder)), StringComparer.Ordinal);
 
             foreach (string folder in folders)
             {
-                if (isLive(Path.GetFileName(folder)!))
+                if (isLive(Path.GetFileName(folder)))
                 {
                     continue;
                 }

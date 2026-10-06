@@ -9,13 +9,21 @@ namespace AgentCore.Application.Hooks.BuiltIn
     internal static class AuditRules
     {
         /// <summary>A fault the model cannot answer, or a tool the model named that no one declared, is a <c>tool.failed</c> row.</summary>
-        internal static bool IsAudited(ToolCalled notice) =>
-            notice is { Outcome: ToolOutcome.Failed, Fatal: true } or { Outcome: ToolOutcome.Undeclared };
+        internal static bool IsAudited(ToolCalled notice)
+        {
+            return notice is { Outcome: ToolOutcome.Failed, Fatal: true } or { Outcome: ToolOutcome.Undeclared };
+        }
 
         /// <summary>A refusal after <c>conversation.ended</c> is no row: nothing is appended behind the end.</summary>
-        internal static bool IsAudited(TurnRefused notice) => !notice.AfterEnd;
+        internal static bool IsAudited(TurnRefused notice)
+        {
+            return !notice.AfterEnd;
+        }
 
         /// <summary>Only flagged words are a <c>prompt.flagged</c> row.</summary>
-        internal static bool IsAudited(InputModerated notice) => notice.Verdict == InputVerdict.Flagged;
+        internal static bool IsAudited(InputModerated notice)
+        {
+            return notice.Verdict == InputVerdict.Flagged;
+        }
     }
 }

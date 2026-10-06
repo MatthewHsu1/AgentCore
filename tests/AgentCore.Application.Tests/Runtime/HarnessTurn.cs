@@ -1,5 +1,4 @@
 using AgentCore.Application.Transcript;
-using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;

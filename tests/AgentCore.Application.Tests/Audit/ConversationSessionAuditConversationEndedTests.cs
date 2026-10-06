@@ -56,7 +56,7 @@ namespace AgentCore.Application.Tests.Audit
 
             Assert.True(turn.IsTerminal);
             AuditEvent ended = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.ConversationEnded);
-            Assert.NotNull(store.LandedAt);
+            _ = Assert.NotNull(store.LandedAt);
             Assert.True(
                 ended.OccurredAt >= store.LandedAt,
                 $"conversation.ended is dated {ended.OccurredAt:O}, before the turn's rows landed at {store.LandedAt:O}.");

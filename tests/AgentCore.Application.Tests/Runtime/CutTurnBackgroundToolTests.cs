@@ -225,8 +225,9 @@ namespace AgentCore.Application.Tests.Runtime
                 time: time);
         }
 
-        private static List<string> Shapes(IEnumerable<ChatMessage> transcript) =>
-        [
+        private static List<string> Shapes(IEnumerable<ChatMessage> transcript)
+        {
+            return [
             .. transcript.Select(message => message.Contents switch
             {
                 var contents when contents.OfType<FunctionCallContent>().Any() => "call",
@@ -234,6 +235,7 @@ namespace AgentCore.Application.Tests.Runtime
                 _ => message.Text,
             }),
         ];
+        }
 
         private static Task ReadAllAsync(TurnRun run)
         {

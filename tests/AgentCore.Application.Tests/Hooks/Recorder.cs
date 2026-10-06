@@ -38,19 +38,40 @@ namespace AgentCore.Application.Tests.Hooks
 
         public override TimeSpan? NoticeTimeout => timeout;
 
-        public override ValueTask OnTurnStartedAsync(TurnStarted notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnTurnStartedAsync(TurnStarted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
-        public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
-        public override ValueTask OnConversationEndedAsync(ConversationEnded notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnConversationEndedAsync(ConversationEnded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
-        public override ValueTask OnConversationUnloadedAsync(ConversationUnloaded notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnConversationUnloadedAsync(ConversationUnloaded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
-        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
-        public override ValueTask OnHostStartedAsync(HostStarted notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnHostStartedAsync(HostStarted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
-        public override ValueTask OnFaultAsync(Fault notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnFaultAsync(Fault notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
         private async ValueTask Record(HookNotice notice)
         {

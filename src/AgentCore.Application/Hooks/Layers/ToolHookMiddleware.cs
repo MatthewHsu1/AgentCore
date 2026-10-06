@@ -42,8 +42,10 @@ namespace AgentCore.Application.Hooks.Layers
                 .Build();
         }
 
-        private static AgentRunOptions? Fresh(AgentRunOptions? options) =>
-            options is ChatClientAgentRunOptions run ? run.Clone() : options;
+        private static AgentRunOptions? Fresh(AgentRunOptions? options)
+        {
+            return options is ChatClientAgentRunOptions run ? run.Clone() : options;
+        }
 
         private sealed record Before(Dictionary<string, object?> Arguments, bool Blocked, bool Responded, object? Result, bool EndLoop);
 
@@ -227,9 +229,11 @@ namespace AgentCore.Application.Hooks.Layers
         }
 
         // MAF's load_skill answers an unknown name with this text (SkillsProviderFactoryTests pins it), serialized.
-        private static bool SkillNotFound(string skill, object? result) =>
-            result is JsonElement { ValueKind: JsonValueKind.String } text
+        private static bool SkillNotFound(string skill, object? result)
+        {
+            return result is JsonElement { ValueKind: JsonValueKind.String } text
             && string.Equals(text.GetString(), $"Error: Skill '{skill}' not found.", StringComparison.Ordinal);
+        }
 
         // A new object, because the old one wraps the model's own call record, which is stored and sent back.
         // It shares the old Context: that is where the turn is filed and where the wrappers leave their marks.

@@ -8,7 +8,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         private readonly Lock _gate = new();
         private readonly List<(LatencyMetric Metric, double Seconds)> _readings = [];
 
-        public void Record(LatencyMetric metric, TimeSpan value, int? turnIndex)
+        public void Record(LatencyMetric metric, TimeSpan value, int? _)
         {
             lock (_gate)
             {

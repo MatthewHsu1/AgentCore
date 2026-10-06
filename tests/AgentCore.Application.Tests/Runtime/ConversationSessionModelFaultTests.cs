@@ -6,7 +6,6 @@ using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Application.Tests.Transcript;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;

@@ -6,7 +6,6 @@ using AgentCore.Application.Hooks.Engine;
 using AgentCore.Application.Hooks.Gates;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Tests.Fakes;
-using AgentCore.Application.Tests.Runtime;
 using AgentCore.Application.Tests.Transcript;
 using AgentCore.TestSupport;
 using Xunit;
@@ -243,7 +242,10 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class ToolGateHook : AgentHook
         {
-            public override ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken) => default;
+            public override ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken)
+            {
+                return default;
+            }
         }
     }
 }

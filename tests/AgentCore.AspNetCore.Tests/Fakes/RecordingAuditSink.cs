@@ -1,4 +1,3 @@
-using AgentCore.Application.Audit.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Domain.Audit;
 

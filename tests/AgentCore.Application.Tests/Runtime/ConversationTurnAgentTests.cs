@@ -2,7 +2,6 @@ using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Evaluation.Fakes;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
-using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;

@@ -91,7 +91,9 @@ namespace AgentCore.Application.Hooks.Layers
             }
         }
 
-        private static TurnInvocation? Filed(AgentRunOptions? options) =>
-            TurnInvocation.From(options) is { Nested: false, User: not null, Hooks: not null } turn ? turn : null;
+        private static TurnInvocation? Filed(AgentRunOptions? options)
+        {
+            return TurnInvocation.From(options) is { Nested: false, User: not null, Hooks: not null } turn ? turn : null;
+        }
     }
 }

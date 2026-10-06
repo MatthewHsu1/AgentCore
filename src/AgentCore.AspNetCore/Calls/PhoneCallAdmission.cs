@@ -13,10 +13,19 @@ namespace AgentCore.AspNetCore.Calls
         /// <summary>Gets whether the call was refused as busy because another call holds its conversation.</summary>
         internal bool HeldByCall { get; private init; }
 
-        internal static PhoneCallAdmission Admitted(PhoneCall call) => new(call, null);
+        internal static PhoneCallAdmission Admitted(PhoneCall call)
+        {
+            return new(call, null);
+        }
 
-        internal static PhoneCallAdmission Refused(CallRefusal refusal) => new(null, refusal);
+        internal static PhoneCallAdmission Refused(CallRefusal refusal)
+        {
+            return new(null, refusal);
+        }
 
-        internal static PhoneCallAdmission RefusedHeldByCall() => new(null, CallRefusal.Busy) { HeldByCall = true };
+        internal static PhoneCallAdmission RefusedHeldByCall()
+        {
+            return new(null, CallRefusal.Busy) { HeldByCall = true };
+        }
     }
 }

@@ -141,10 +141,15 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class ClosedGate : AgentHook
         {
-            public override HookFailure FailureFor(GatePoint point) => HookFailure.Closed;
+            public override HookFailure FailureFor(GatePoint point)
+            {
+                return HookFailure.Closed;
+            }
 
-            public override ValueTask BeforeTurnAsync(TurnGate gate, CancellationToken cancellationToken) =>
+            public override ValueTask BeforeTurnAsync(TurnGate gate, CancellationToken cancellationToken)
+            {
                 throw new InvalidOperationException("boom");
+            }
         }
 
         private sealed class Gate(Action<TurnGate> decide) : AgentHook

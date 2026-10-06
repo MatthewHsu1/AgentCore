@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Hooks.BuiltIn;
 using AgentCore.Application.Hooks.Engine;

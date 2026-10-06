@@ -133,7 +133,7 @@ namespace AgentCore.Application.Tests.Tools
         public async Task Publish_AFileInAFolder_LinksByTheStoredNameEscaped(string path, string expected)
         {
             string full = Path.Combine(_root, "conversation-1", path);
-            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(full)!);
             File.WriteAllText(full, "a\n");
 
             JsonObject result = await PublishAsync(path);

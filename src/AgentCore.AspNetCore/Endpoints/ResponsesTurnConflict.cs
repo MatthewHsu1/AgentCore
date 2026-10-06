@@ -28,8 +28,10 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <summary>Picks the message for a <see cref="TurnRefusalTokens"/> reason.</summary>
         /// <param name="refusedReason">The <c>refusedReason</c> of the turn's <c>turn.refused</c> event.</param>
         /// <returns>The message the caller reads.</returns>
-        public static string MessageFor(string refusedReason) =>
-            refusedReason == TurnRefusalTokens.ToToken(TurnRefusal.Busy) ? BusyMessage : ConflictMessage;
+        public static string MessageFor(string refusedReason)
+        {
+            return refusedReason == TurnRefusalTokens.ToToken(TurnRefusal.Busy) ? BusyMessage : ConflictMessage;
+        }
 
         /// <summary>
         /// Ends a stream whose headers already left with the Responses <c>error</c> event, in place of the

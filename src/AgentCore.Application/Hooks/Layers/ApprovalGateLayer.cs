@@ -157,10 +157,16 @@ namespace AgentCore.Application.Hooks.Layers
             return new(ChatRole.User, [.. denied.Select(static pair => (AIContent)pair.Request.CreateResponse(false, pair.Reason))]);
         }
 
-        private static int? RoundsSoFar(AgentRunOptions? options) => TurnInvocation.From(options)?.Rounds?.Count;
+        private static int? RoundsSoFar(AgentRunOptions? options)
+        {
+            return TurnInvocation.From(options)?.Rounds?.Count;
+        }
 
         // Without a round counter every run counts, which can only end the run sooner.
-        private static bool CalledTheModel(int? before, AgentRunOptions? options) => before is null || RoundsSoFar(options) != before;
+        private static bool CalledTheModel(int? before, AgentRunOptions? options)
+        {
+            return before is null || RoundsSoFar(options) != before;
+        }
 
         /// <summary>The cap is reached with a denial still open: never a person's to answer. Logs, raises the fault, and throws.</summary>
         private static InvalidOperationException Exhausted(List<(ToolApprovalRequestContent Request, string Reason)> denied, AgentRunOptions? options)

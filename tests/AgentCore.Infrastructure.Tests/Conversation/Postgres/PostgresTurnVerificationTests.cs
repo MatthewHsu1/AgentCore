@@ -3,7 +3,6 @@ using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Hooks;
 using AgentCore.Domain.Audit;
 using AgentCore.Infrastructure.Audit.Postgres;

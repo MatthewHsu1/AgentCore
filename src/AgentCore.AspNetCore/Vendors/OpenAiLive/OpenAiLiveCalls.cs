@@ -65,13 +65,13 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
 
         internal void ReleaseCall(string callId)
         {
-            _claimed.TryRemove(callId, out _);
+            _ = _claimed.TryRemove(callId, out _);
         }
 
         /// <summary>Forgets a webhook id whose request failed, so the retry OpenAI sends under the same id is processed.</summary>
         internal void ReleaseWebhook(string webhookId)
         {
-            _webhooks.TryRemove(webhookId, out _);
+            _ = _webhooks.TryRemove(webhookId, out _);
         }
 
         /// <summary>

@@ -1,4 +1,3 @@
-using System.Net.WebSockets;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;

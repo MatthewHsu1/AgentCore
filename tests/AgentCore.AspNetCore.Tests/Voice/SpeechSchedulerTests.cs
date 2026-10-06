@@ -116,7 +116,10 @@ namespace AgentCore.AspNetCore.Tests.Voice
         [Fact(Timeout = 30_000)]
         public async Task WaitForIdle_CompletesAtOnceWithNoSpeech()
         {
-            await _scheduler.WaitForIdleAsync(TestContext.Current.CancellationToken);
+            Task idle = _scheduler.WaitForIdleAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(idle.IsCompletedSuccessfully);
+            await idle;
         }
 
         [Fact(Timeout = 30_000)]

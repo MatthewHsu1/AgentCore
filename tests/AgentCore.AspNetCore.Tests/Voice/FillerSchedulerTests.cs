@@ -67,7 +67,9 @@ namespace AgentCore.AspNetCore.Tests.Voice
             FillerScheduler scheduler = new(_session, _handle, "x", TimeSpan.FromSeconds(10));
 
             await scheduler.CloseAsync();
-            await scheduler.CloseAsync();
+            Exception? second = await Record.ExceptionAsync(scheduler.CloseAsync);
+
+            Assert.Null(second);
         }
 
         // filler_scheduler.py (_FillerScheduler.__init__): a negative dwell or interval is refused.
@@ -202,7 +204,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
 
             for (int fire = 1; fire <= 3; fire++)
             {
-                DateTimeOffset dwellEnds = Start.AddMilliseconds(100 * fire - 50);
+                DateTimeOffset dwellEnds = Start.AddMilliseconds((100 * fire) - 50);
                 await ArmedAsync(dwellEnds);
                 _time.Advance(TimeSpan.FromMilliseconds(50));
                 await _output.WaitForLogAsync(2 * fire);
@@ -281,7 +283,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
 
             CapturedLine line = Assert.Single(logs.Of(FillerFaulted));
             Assert.Equal(LogLevel.Error, line.Level);
-            Assert.IsType<InvalidOperationException>(line.Exception);
+            _ = Assert.IsType<InvalidOperationException>(line.Exception);
             Assert.Contains("does not support say()", line.Exception!.Message, StringComparison.Ordinal);
         }
 

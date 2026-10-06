@@ -46,16 +46,20 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
                 : new LiveEvent.Other(type);
         }
 
-        private static string? Text(JsonElement element, string name) =>
-            element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
+        private static string? Text(JsonElement element, string name)
+        {
+            return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value) && value.ValueKind == JsonValueKind.String
                 ? value.GetString()
                 : null;
+        }
 
-        private static int? Number(JsonElement element, string name) =>
-            element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value)
+        private static int? Number(JsonElement element, string name)
+        {
+            return element.ValueKind == JsonValueKind.Object && element.TryGetProperty(name, out JsonElement value)
                 && value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out double number)
                 && number is >= int.MinValue and <= int.MaxValue
                 ? (int)number
                 : null;
+        }
     }
 }

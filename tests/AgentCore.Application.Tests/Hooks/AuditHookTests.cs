@@ -17,7 +17,10 @@ namespace AgentCore.Application.Tests.Hooks
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        private static HookScope Scope(int? turn = 0) => new("conversation-1", "main", turn, "", Guid.CreateVersion7(), 3, Moment);
+        private static HookScope Scope(int? turn = 0)
+        {
+            return new("conversation-1", "main", turn, "", Guid.CreateVersion7(), 3, Moment);
+        }
 
         private static async Task<AuditEvent> RowOfAsync(Func<AgentHook, ValueTask> deliver)
         {
@@ -33,7 +36,7 @@ namespace AgentCore.Application.Tests.Hooks
 
             AuditEvent row = await RowOfAsync(hook => hook.OnTurnCompletedAsync(completed, Ct));
 
-            Assert.Equal((AuditEventKind.TurnCompleted, completed.EventId, Moment, (int?)0), (row.Kind, row.EventId, row.OccurredAt, row.TurnIndex));
+            Assert.Equal((AuditEventKind.TurnCompleted, completed.EventId, Moment, 0), (row.Kind, row.EventId, row.OccurredAt, row.TurnIndex));
             Assert.Equal(HelloSha256, row.Payload[AuditPayloadKeys.ReplyTextSha256]);
             Assert.Equal(("a", "b"), (row.Payload[AuditPayloadKeys.StageBefore], row.Payload[AuditPayloadKeys.StageAfter]));
             AuditEventVocabulary.Validate(row);

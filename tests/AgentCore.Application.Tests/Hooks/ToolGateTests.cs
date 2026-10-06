@@ -1,4 +1,3 @@
-using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.Gates;
 using AgentCore.Application.Hooks.Notices;
@@ -217,10 +216,15 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class ClosedAfterTool : AgentHook
         {
-            public override HookFailure FailureFor(GatePoint point) => HookFailure.Closed;
+            public override HookFailure FailureFor(GatePoint point)
+            {
+                return HookFailure.Closed;
+            }
 
-            public override ValueTask AfterToolAsync(ToolResultGate gate, CancellationToken cancellationToken) =>
+            public override ValueTask AfterToolAsync(ToolResultGate gate, CancellationToken cancellationToken)
+            {
                 throw new InvalidOperationException("boom");
+            }
         }
 
         private sealed class Gate(

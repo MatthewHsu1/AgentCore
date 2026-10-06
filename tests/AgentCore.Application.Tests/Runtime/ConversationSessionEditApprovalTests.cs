@@ -70,7 +70,7 @@ namespace AgentCore.Application.Tests.Runtime
                     ? new ApprovalRequiredAIFunction(AIFunctionFactory.Create((string to) => { ran++; return "sent"; }, declared.Id, declared.Id))
                     : null);
             TurnResult afterReload = await reloaded.RunTurnAsync("still there?", Ct);
-            Assert.Equal((0, (string?)null, (string?)null, 0), (orphanAnswers.Count, next.Failure, afterReload.Failure, ran));
+            Assert.Equal((0, null, null, 0), (orphanAnswers.Count, next.Failure, afterReload.Failure, ran));
             Assert.DoesNotContain(hook.Of<ApprovalChanged>(), changed => changed.State == ApprovalState.Denied && changed.Scope.TurnIndex == edited.TurnIndex);
         }
 

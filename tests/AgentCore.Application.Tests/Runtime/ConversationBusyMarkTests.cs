@@ -99,7 +99,7 @@ namespace AgentCore.Application.Tests.Runtime
             Exception? dropped = await Record.ExceptionAsync(() => turn);
 
             // Assert
-            _ = Assert.IsAssignableFrom<OperationCanceledException>(dropped);
+            _ = Assert.IsType<OperationCanceledException>(dropped, exactMatch: false);
             Assert.Empty(model.Requests);
             AuditEvent refused = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnRefused);
             Assert.Equal(("gone", null), (refused.Payload[AuditPayloadKeys.RefusedReason], refused.TurnIndex));

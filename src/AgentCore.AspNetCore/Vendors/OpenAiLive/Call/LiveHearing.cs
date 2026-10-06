@@ -11,9 +11,15 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
     {
         private readonly LiveTranscriptLedger _ledger = new();
 
-        internal ValueTask HearAsync(LiveEvent.Transcript delta) => RaiseAsync(_ledger.Add(delta));
+        internal ValueTask HearAsync(LiveEvent.Transcript delta)
+        {
+            return RaiseAsync(_ledger.Add(delta));
+        }
 
-        internal ValueTask FlushAsync() => RaiseAsync(_ledger.Flush());
+        internal ValueTask FlushAsync()
+        {
+            return RaiseAsync(_ledger.Flush());
+        }
 
         /// <summary>Raises the lines the delegation closed, and gives the ask its context and the caller's new words.</summary>
         internal async ValueTask<(IReadOnlyList<LiveLine> Before, string Words)> TakeForDelegationAsync()

@@ -1,5 +1,4 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;

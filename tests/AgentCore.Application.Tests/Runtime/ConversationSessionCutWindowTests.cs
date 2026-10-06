@@ -3,7 +3,6 @@ using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain.Audit;
-using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Application.Runtime.Cut;

@@ -73,7 +73,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Task other = ev.WaitAsync(TestContext.Current.CancellationToken);
 
             await cts.CancelAsync();
-            await Assert.ThrowsAsync<TaskCanceledException>(() => cancelled);
+            _ = await Assert.ThrowsAsync<TaskCanceledException>(() => cancelled);
 
             Assert.False(ev.IsSet);
             Assert.False(other.IsCompleted);

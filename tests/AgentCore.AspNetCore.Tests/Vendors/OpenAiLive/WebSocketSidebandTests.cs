@@ -24,7 +24,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             _ = builder.Logging.ClearProviders();
             await using WebApplication app = builder.Build();
             _ = app.UseWebSockets();
-            _ = app.Map("/v1/live/sessions/rtc_1/attach", async (HttpContext http) =>
+            _ = app.Map("/v1/live/sessions/rtc_1/attach", async http =>
             {
                 authorization = http.Request.Headers.Authorization;
                 using WebSocket socket = await http.WebSockets.AcceptWebSocketAsync();

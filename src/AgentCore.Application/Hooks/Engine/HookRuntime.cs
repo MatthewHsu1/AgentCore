@@ -54,7 +54,11 @@ namespace AgentCore.Application.Hooks.Engine
             AgentHook[] added = [.. hooks];
             foreach (AgentHook hook in added)
             {
-                ArgumentNullException.ThrowIfNull(hook, nameof(hooks));
+                if (hook is null)
+                {
+                    throw new ArgumentNullException(nameof(hooks), "A hook in the list is null.");
+                }
+
                 if (!Table.Hooks.Contains(hook, ReferenceEqualityComparer.Instance) && HookTable.Build([hook]).OverridesAnyGate(hook))
                 {
                     throw new ArgumentException(
@@ -74,9 +78,15 @@ namespace AgentCore.Application.Hooks.Engine
             _ = Notices.Raise(fault, Timers, except: except);
         }
 
-        internal ValueTask StopAsync(TimeSpan timeout) => Notices.StopAsync(timeout);
+        internal ValueTask StopAsync(TimeSpan timeout)
+        {
+            return Notices.StopAsync(timeout);
+        }
 
         /// <inheritdoc />
-        public ValueTask DisposeAsync() => StopAsync(StopTimeout);
+        public ValueTask DisposeAsync()
+        {
+            return StopAsync(StopTimeout);
+        }
     }
 }

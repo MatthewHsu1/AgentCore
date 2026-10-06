@@ -43,7 +43,10 @@ namespace AgentCore.Application.Hooks.Engine
 
         internal bool IsIdle => Volatile.Read(ref _pending) == 0;
 
-        internal bool Wants(HookNotice notice) => _wants.Contains(notice.GetType());
+        internal bool Wants(HookNotice notice)
+        {
+            return _wants.Contains(notice.GetType());
+        }
 
         /// <summary>Queues one notice. Runs under the mailbox lock, so queue order is <c>Sequence</c> order.</summary>
         internal void Write(HookNotice notice)
@@ -108,7 +111,10 @@ namespace AgentCore.Application.Hooks.Engine
             };
         }
 
-        private static string NameOf(AgentHook hook) => hook.GetType().FullName ?? hook.GetType().Name;
+        private static string NameOf(AgentHook hook)
+        {
+            return hook.GetType().FullName ?? hook.GetType().Name;
+        }
 
         // The reader lives as long as the mailbox. Started with the raiser's context, every later delivery would
         // run inside the first turn's trace, logging scopes and run context, and keep them alive.

@@ -25,15 +25,12 @@ namespace AgentCore.AspNetCore.DependencyInjection.Startup
                 return;
             }
 
-            foreach (string toolId in filler.Keys.Order(StringComparer.Ordinal))
+            foreach (string toolId in filler.Keys.Where(id => !servedToolIds.Contains(id)).Order(StringComparer.Ordinal))
             {
-                if (!servedToolIds.Contains(toolId))
-                {
-                    StartupLog.FillerToolUnknown(
-                        logger,
-                        ConfigurationError.AppendPointer("/providers/conversation/filler", toolId),
-                        toolId);
-                }
+                StartupLog.FillerToolUnknown(
+                    logger,
+                    ConfigurationError.AppendPointer("/providers/conversation/filler", toolId),
+                    toolId);
             }
         }
     }

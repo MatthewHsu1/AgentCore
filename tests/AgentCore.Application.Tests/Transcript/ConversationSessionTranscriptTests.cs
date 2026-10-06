@@ -6,7 +6,6 @@ using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Runtime;
-using AgentCore.Application.Tools.Binding;
 using AgentCore.Application.Transcript;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;

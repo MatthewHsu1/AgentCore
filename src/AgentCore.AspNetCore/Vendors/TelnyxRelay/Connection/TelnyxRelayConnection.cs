@@ -32,8 +32,6 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
 
         private readonly CancellationTokenSource _cancellation;
 
-        private readonly CancellationToken _connectionToken;
-
         private readonly IHostApplicationLifetime _lifetime;
 
         private readonly ConnectionTaskObserver _observer;
@@ -64,7 +62,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
                 http.RequestAborted,
                 _lifetime.ApplicationStopping);
 
-            _connectionToken = _cancellation.Token;
+            CancellationToken connectionToken = _cancellation.Token;
 
             TimeProvider timeProvider = http.RequestServices.GetRequiredService<TimeProvider>();
 
@@ -87,9 +85,9 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
                     frameType => TelnyxRelayLog.FrameBodyRefused(_logger, frameType, ConversationIdForLog),
                     () => TelnyxRelayLog.IdleTimeoutReached(_logger, ConversationIdForLog)),
                 timeProvider,
-                _connectionToken);
+                connectionToken);
 
-            _sender = new JsonWebSocketSender(socket, _options.CloseTimeout, _connectionToken);
+            _sender = new JsonWebSocketSender(socket, _options.CloseTimeout, connectionToken);
 
             AgentCoreBoot boot = http.RequestServices.GetRequiredService<AgentCoreBoot>();
             _loop = new VoiceConversationLoop(
@@ -101,7 +99,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
                 timeProvider,
                 logger,
                 _options.CloseTimeout,
-                _connectionToken,
+                connectionToken,
                 _options.Voice,
                 Replaced);
         }
@@ -279,13 +277,16 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
             }
         }
 
-        private static string RefusalDescription(CallRefusal? refusal, bool heldByCall) => refusal switch
+        private static string RefusalDescription(CallRefusal? refusal, bool heldByCall)
         {
-            CallRefusal.Busy when heldByCall => HeldByCallDescription,
-            CallRefusal.Busy => ConversationInUseDescription,
-            CallRefusal.Declined => "the call was declined",
-            _ => "the call could not be taken now",
-        };
+            return refusal switch
+            {
+                CallRefusal.Busy when heldByCall => HeldByCallDescription,
+                CallRefusal.Busy => ConversationInUseDescription,
+                CallRefusal.Declined => "the call was declined",
+                _ => "the call could not be taken now",
+            };
+        }
 
         /// <summary>Reads the ending one close status reports, as one member of the closed set.</summary>
         /// <param name="status">What <see cref="DetermineCloseStatus"/> already decided this conversation closes with.</param>

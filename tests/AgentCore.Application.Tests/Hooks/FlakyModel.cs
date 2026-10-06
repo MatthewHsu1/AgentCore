@@ -47,8 +47,10 @@ namespace AgentCore.Application.Tests.Hooks
             yield return new ChatResponseUpdate(ChatRole.Assistant, " text") { MessageId = "m" };
         }
 
-        public object? GetService(Type serviceType, object? serviceKey = null) =>
-            serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+        }
 
         public void Dispose()
         {

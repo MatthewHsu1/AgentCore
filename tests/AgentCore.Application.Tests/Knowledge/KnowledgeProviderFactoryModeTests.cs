@@ -4,7 +4,6 @@ using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using static AgentCore.Application.Tests.Knowledge.KnowledgeProviderFactoryTestSupport;

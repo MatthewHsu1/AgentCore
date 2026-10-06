@@ -115,7 +115,7 @@ namespace AgentCore.Application.Tests.Audit
 
             _ = Assert.Single(inner.Attempts);
             LogLine line = Assert.Single(_logger.Of(AuditAppendFailedEventId));
-            _ = Assert.IsAssignableFrom<OperationCanceledException>(line.Exception);
+            _ = Assert.IsType<OperationCanceledException>(line.Exception, exactMatch: false);
             Assert.Empty(inner.Events);
         }
 

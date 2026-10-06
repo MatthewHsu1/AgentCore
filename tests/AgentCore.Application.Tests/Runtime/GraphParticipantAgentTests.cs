@@ -57,7 +57,10 @@ namespace AgentCore.Application.Tests.Runtime
             Assert.Equal(("rows.csv", "publisher"), (card.File.Name, card.Author));
         }
 
-        private static (string?, int?, bool?) Facts(TurnInvocation? turn) => (turn?.ConversationId, turn?.TurnIndex, turn?.Nested);
+        private static (string?, int?, bool?) Facts(TurnInvocation? turn)
+        {
+            return (turn?.ConversationId, turn?.TurnIndex, turn?.Nested);
+        }
 
         /// <summary>Publishes a file the way <c>file.publish</c> files it, under its tool call, then fails the run.</summary>
         private sealed class PublishThenThrowAgent : AIAgent

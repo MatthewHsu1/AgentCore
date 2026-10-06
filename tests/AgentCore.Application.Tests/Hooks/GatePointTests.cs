@@ -24,7 +24,7 @@ namespace AgentCore.Application.Tests.Hooks
         };
 
         [Theory]
-        [MemberData(nameof(Points))]
+        [MemberData(nameof(Points), DisableDiscoveryEnumeration = true)]
         public void EachPointHasTheSpecsDeadlineAndDefault(GatePoint point, double seconds, HookFailure failure)
         {
             Assert.Equal(TimeSpan.FromSeconds(seconds), point.Deadline);

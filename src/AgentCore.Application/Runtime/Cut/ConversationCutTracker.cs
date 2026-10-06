@@ -36,9 +36,9 @@ namespace AgentCore.Application.Runtime.Cut
         internal bool Cut(int turnIndex, TurnCut cut)
         {
             ArgumentNullException.ThrowIfNull(cut);
-            if (cut.Played is { } played)
+            if (cut.Played < TimeSpan.Zero)
             {
-                ArgumentOutOfRangeException.ThrowIfLessThan(played, TimeSpan.Zero, nameof(cut));
+                throw new ArgumentOutOfRangeException(nameof(cut), cut.Played, "The played time is negative.");
             }
 
             lock (_session.TurnLock)
@@ -68,9 +68,9 @@ namespace AgentCore.Application.Runtime.Cut
         internal bool Recut(int turnIndex, TurnCut cut)
         {
             ArgumentNullException.ThrowIfNull(cut);
-            if (cut.Played is { } played)
+            if (cut.Played < TimeSpan.Zero)
             {
-                ArgumentOutOfRangeException.ThrowIfLessThan(played, TimeSpan.Zero, nameof(cut));
+                throw new ArgumentOutOfRangeException(nameof(cut), cut.Played, "The played time is negative.");
             }
 
             lock (_session.TurnLock)

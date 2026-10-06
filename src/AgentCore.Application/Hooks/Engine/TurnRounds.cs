@@ -5,7 +5,10 @@ namespace AgentCore.Application.Hooks.Engine
     {
         private int _next = -1;
 
-        internal int Next() => Interlocked.Increment(ref _next);
+        internal int Next()
+        {
+            return Interlocked.Increment(ref _next);
+        }
 
         /// <summary>Gets how many model round trips the turn has made so far.</summary>
         internal int Count => Volatile.Read(ref _next) + 1;

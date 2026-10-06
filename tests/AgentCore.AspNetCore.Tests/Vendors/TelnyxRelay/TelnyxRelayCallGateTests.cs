@@ -3,7 +3,6 @@ using AgentCore.Application.Hooks.Gates;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.AspNetCore.Vendors.TelnyxRelay;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
 using Xunit;
@@ -93,7 +92,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
 
             Assert.Equal(ConversationEndReason.CallerHungUp, ended.Reason);
-            Assert.Equal(("conversation-one", (string?)null), (ended.Call!.CallId, ended.Call.Cause));
+            Assert.Equal(("conversation-one", null), (ended.Call!.CallId, ended.Call.Cause));
         }
 
         // A relay call's brief reaches the engine too.

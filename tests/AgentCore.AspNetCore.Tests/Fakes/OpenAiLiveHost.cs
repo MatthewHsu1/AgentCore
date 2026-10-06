@@ -1,4 +1,3 @@
-using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using AgentCore.Application.Configuration.Parsing;
@@ -120,7 +119,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                     }
 
                     _ = host?.FirstAttach.TrySetResult(sideband);
-                    return (ILiveSideband)sideband;
+                    return sideband;
                 },
                 new Uri("https://api.openai.test/"));
 
@@ -165,10 +164,15 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             return _client.SendAsync(request, TestContext.Current.CancellationToken);
         }
 
-        public static string IncomingCall(string callId) =>
-            $$$"""{"object":"event","id":"evt_{{{callId}}}","type":"realtime.call.incoming","created_at":1790500000,"data":{"call_id":"{{{callId}}}","sip_headers":[{"name":"From","value":"<sip:+15550100@sip.telnyx.com>"},{"name":"To","value":"<sip:+15550199@sip.api.openai.com>"}]}}""";
+        public static string IncomingCall(string callId)
+        {
+            return $$$"""{"object":"event","id":"evt_{{{callId}}}","type":"realtime.call.incoming","created_at":1790500000,"data":{"call_id":"{{{callId}}}","sip_headers":[{"name":"From","value":"<sip:+15550100@sip.telnyx.com>"},{"name":"To","value":"<sip:+15550199@sip.api.openai.com>"}]}}""";
+        }
 
-        public Task StopAsync() => _app.StopAsync(TestContext.Current.CancellationToken);
+        public Task StopAsync()
+        {
+            return _app.StopAsync(TestContext.Current.CancellationToken);
+        }
 
         public async ValueTask DisposeAsync()
         {

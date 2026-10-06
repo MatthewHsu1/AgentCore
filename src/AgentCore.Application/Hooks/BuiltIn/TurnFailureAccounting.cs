@@ -31,13 +31,16 @@ namespace AgentCore.Application.Hooks.BuiltIn
         /// <param name="outcome">How the turn ended.</param>
         /// <param name="failedInTool">Whether the fallback came from a tool that spent its retry budget.</param>
         /// <returns>The row, or <see cref="Row.None"/>.</returns>
-        internal static Row Of(TurnOutcome outcome, bool failedInTool) => (outcome, failedInTool) switch
+        internal static Row Of(TurnOutcome outcome, bool failedInTool)
         {
-            (TurnOutcome.Empty, _) => Row.EmptyReply,
-            (TurnOutcome.Fallback, true) => Row.ToolBudget,
-            (TurnOutcome.Fallback or TurnOutcome.Faulted, _) => Row.RunFault,
-            _ => Row.None,
-        };
+            return (outcome, failedInTool) switch
+            {
+                (TurnOutcome.Empty, _) => Row.EmptyReply,
+                (TurnOutcome.Fallback, true) => Row.ToolBudget,
+                (TurnOutcome.Fallback or TurnOutcome.Faulted, _) => Row.RunFault,
+                _ => Row.None,
+            };
+        }
 
         /// <summary>Counts the row on <c>agentcore.turn.failures</c>.</summary>
         /// <param name="row">The row.</param>

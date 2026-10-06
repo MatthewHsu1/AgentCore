@@ -35,7 +35,10 @@ namespace AgentCore.Application.Tests.Hooks
         public ToolCallingChatClient Model { get; } = new("done.", new Dictionary<string, object?>(StringComparer.Ordinal) { ["to"] = "a@b.com" });
 
         /// <summary>Gets how many times the named tool ran.</summary>
-        public int Ran(string tool) => _ran.TryGetValue(tool, out int count) ? count : 0;
+        public int Ran(string tool)
+        {
+            return _ran.TryGetValue(tool, out int count) ? count : 0;
+        }
 
         public ConversationSession Session(
             string yaml,
@@ -58,7 +61,10 @@ namespace AgentCore.Application.Tests.Hooks
             };
         }
 
-        public ApprovalRequiredAIFunction Send() => new(Counting("send_email"));
+        public ApprovalRequiredAIFunction Send()
+        {
+            return new(Counting("send_email"));
+        }
 
         private AIFunction Counting(string name)
         {

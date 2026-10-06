@@ -19,16 +19,28 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public Task Finished => _finished.Task;
 
         /// <summary>Streams text, then waits until the reader has handled it.</summary>
-        public Task TextAsync(string text) => PushAsync(new TextContent(text));
+        public Task TextAsync(string text)
+        {
+            return PushAsync(new TextContent(text));
+        }
 
         /// <summary>Streams a tool call, then waits until the reader has handled it.</summary>
-        public Task CallAsync(string callId, string name = "lookup") => PushAsync(new FunctionCallContent(callId, name));
+        public Task CallAsync(string callId, string name = "lookup")
+        {
+            return PushAsync(new FunctionCallContent(callId, name));
+        }
 
         /// <summary>Streams a tool result, then waits until the reader has handled it.</summary>
-        public Task ResultAsync(string callId) => PushAsync(new FunctionResultContent(callId, "done"));
+        public Task ResultAsync(string callId)
+        {
+            return PushAsync(new FunctionResultContent(callId, "done"));
+        }
 
         /// <summary>Ends the turn once every update pushed so far is read.</summary>
-        public void End() => _updates.Writer.TryComplete();
+        public void End()
+        {
+            _ = _updates.Writer.TryComplete();
+        }
 
         /// <summary>Plays the turn to the engine's reader.</summary>
         internal async IAsyncEnumerable<ChatResponseUpdate> StreamAsync(

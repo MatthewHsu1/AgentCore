@@ -6,7 +6,6 @@ using AgentCore.Application.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using AgentCore.Application.Runtime.Cut;
-using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Application.Runtime.ToolCalls
 {
@@ -99,7 +98,11 @@ namespace AgentCore.Application.Runtime.ToolCalls
                 return await run.Running.ConfigureAwait(false);
             }
 
-            IEnumerable<AIContent> Attachments() => drain?.TakeFor(callId) ?? [];
+            IEnumerable<AIContent> Attachments()
+            {
+                return drain?.TakeFor(callId) ?? [];
+            }
+
             object? result;
             try
             {

@@ -3,7 +3,6 @@ using System.Text.Json;
 using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tools;
 using Microsoft.Extensions.AI;
-using AgentCore.Application.Runtime.ToolCalls;
 
 namespace AgentCore.Application.Tests.Runtime
 {

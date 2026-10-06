@@ -14,14 +14,22 @@ namespace AgentCore.Application.Runtime.Turn
         /// <param name="inner">The run's own stream. This owns and disposes its enumerator.</param>
         /// <param name="notices">This turn's notice channel. Completed once <paramref name="inner"/> ends or fails.</param>
         /// <param name="cancellationToken">Cancels the run.</param>
-        internal static async IAsyncEnumerable<AgentResponseUpdate> RunAsync(
+        internal static IAsyncEnumerable<AgentResponseUpdate> RunAsync(
             IAsyncEnumerable<AgentResponseUpdate> inner,
             TurnNotices notices,
-            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(inner);
             ArgumentNullException.ThrowIfNull(notices);
 
+            return MergeAsync(inner, notices, cancellationToken);
+        }
+
+        private static async IAsyncEnumerable<AgentResponseUpdate> MergeAsync(
+            IAsyncEnumerable<AgentResponseUpdate> inner,
+            TurnNotices notices,
+            [EnumeratorCancellation] CancellationToken cancellationToken)
+        {
             ChannelReader<NoticeContent> reader = notices.Reader;
             await using IAsyncEnumerator<AgentResponseUpdate> e = inner.GetAsyncEnumerator(cancellationToken);
             Task<bool>? pendingMove = null;
@@ -83,10 +91,11 @@ namespace AgentCore.Application.Runtime.Turn
                     // already unwinding on the same token, so it is settled here first.
                     try
                     {
-                        await pendingMove.ConfigureAwait(false);
+                        _ = await pendingMove.ConfigureAwait(false);
                     }
                     catch
                     {
+                        // The run's own failure or cancellation already reaches the caller; this only lets the enumerator dispose.
                     }
                 }
             }

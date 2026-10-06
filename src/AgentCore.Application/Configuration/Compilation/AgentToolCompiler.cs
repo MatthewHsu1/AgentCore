@@ -101,7 +101,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 if (context.ChatClients.ResolveHostedTool(tool, model) is not { } resolved)
                 {
                     ILogger logger = context.Loggers?.CreateLogger(typeof(AgentToolCompiler)) ?? NullLogger.Instance;
-                    
+
                     string modelDescription = model is { Ref.Length: > 0 } ? $"the model '{model.Ref}'" : "this agent's default model";
 
                     Log.HostedToolDropped(logger, agentId, toolId, tool.GetType().Name, modelDescription);

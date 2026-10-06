@@ -30,7 +30,7 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
         private readonly ILogger _logger;
 
         private volatile Exception? _fault;
-        
+
         private int? _turnIndex;
 
         private TurnCut? _cut;

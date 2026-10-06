@@ -8,15 +8,9 @@ namespace AgentCore.Application.Runtime.Compaction
     /// Wraps the summariser for one invocation and posts the start notice at the one point that
     /// actually means "the summariser is being called": the first request this client forwards.
     /// </summary>
-    internal sealed class NoticingChatClient : DelegatingChatClient
+    internal sealed class NoticingChatClient(IChatClient inner, TurnNotices? notices) : DelegatingChatClient(inner)
     {
-        private readonly TurnNotices? _notices;
-
-        public NoticingChatClient(IChatClient inner, TurnNotices? notices)
-            : base(inner)
-        {
-            _notices = notices;
-        }
+        private readonly TurnNotices? _notices = notices;
 
         /// <summary>Gets whether this client has forwarded a request yet.</summary>
         public bool Called { get; private set; }

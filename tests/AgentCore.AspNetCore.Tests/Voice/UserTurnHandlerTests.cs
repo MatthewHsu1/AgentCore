@@ -136,7 +136,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Task idle = scheduler.WaitForIdleAsync(cts.Token);
             cts.Cancel();
 
-            await Assert.ThrowsAsync<TaskCanceledException>(() => idle);
+            _ = await Assert.ThrowsAsync<TaskCanceledException>(() => idle);
             Assert.False(userTurnGate.Task.IsCanceled);
 
             _ = userTurnGate.TrySetResult();
@@ -153,7 +153,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             using CancellationTokenSource cts = new();
             Task idle = _session.Scheduler.WaitForIdleAsync(cts.Token);
             cts.Cancel();
-            await Assert.ThrowsAsync<TaskCanceledException>(() => idle);
+            _ = await Assert.ThrowsAsync<TaskCanceledException>(() => idle);
             Assert.False(staleTurn.Task.IsCanceled);
 
             _ = staleTurn.TrySetResult();

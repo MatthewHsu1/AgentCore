@@ -63,7 +63,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             Assert.Equal((1, 1), (tool.Runs, tool.Finished));
             Assert.Equal(Answer, newer.ReplyText);
-            Assert.Contains(model.Requests[^1], message => HasResult(message));
+            Assert.Contains(model.Requests[^1], HasResult);
             Assert.Equal(["hello", Answer, Combined, "call", "result", Answer], Shapes(session.Transcript));
             _ = Assert.Single(hook.Of<TurnSuperseded>());
             Assert.Equal(ToolOutcome.Ok, Assert.Single(hook.Of<ToolCalled>()).Outcome);
@@ -93,7 +93,7 @@ namespace AgentCore.Application.Tests.Runtime
             _ = await session.RunTurnAsync(Later, Ct);
 
             Assert.Equal((1, 1), (tool.Runs, tool.Finished));
-            Assert.Contains(model.Requests[^1], message => HasResult(message));
+            Assert.Contains(model.Requests[^1], HasResult);
             Assert.Equal([Question, "call", "result", Later, Answer], Shapes(session.Transcript));
             await session.FlushNoticesAsync();
             Assert.Equal(ToolOutcome.Ok, Assert.Single(hook.Of<ToolCalled>()).Outcome);
@@ -242,11 +242,14 @@ namespace AgentCore.Application.Tests.Runtime
                 time: time);
         }
 
-        private static bool HasResult(ChatMessage message) =>
-            message.Contents.OfType<FunctionResultContent>().Any(result => result.Result?.ToString() == GatedTool.Result);
+        private static bool HasResult(ChatMessage message)
+        {
+            return message.Contents.OfType<FunctionResultContent>().Any(result => result.Result?.ToString() == GatedTool.Result);
+        }
 
-        private static List<string> Shapes(IEnumerable<ChatMessage> transcript) =>
-        [
+        private static List<string> Shapes(IEnumerable<ChatMessage> transcript)
+        {
+            return [
             .. transcript.Select(message => message.Contents switch
             {
                 var contents when contents.OfType<FunctionCallContent>().Any() => "call",
@@ -254,6 +257,7 @@ namespace AgentCore.Application.Tests.Runtime
                 _ => message.Text,
             }),
         ];
+        }
 
         // A run the host cancelled ends in its cancellation; one whose model never read the token ends on its own.
         private static async Task EndedAsync(Task reading)

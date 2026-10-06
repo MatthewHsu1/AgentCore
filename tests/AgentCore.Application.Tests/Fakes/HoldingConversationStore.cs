@@ -42,7 +42,7 @@ namespace AgentCore.Application.Tests.Fakes
         {
             TaskCompletionSource? gate = _gets;
             _gets = null;
-            gate?.TrySetResult();
+            _ = (gate?.TrySetResult());
         }
 
         /// <summary>Disarms the gate of appends, and lets every held append go on.</summary>
@@ -50,7 +50,7 @@ namespace AgentCore.Application.Tests.Fakes
         {
             TaskCompletionSource? gate = _appends;
             _appends = null;
-            gate?.TrySetResult();
+            _ = (gate?.TrySetResult());
         }
 
         /// <inheritdoc />

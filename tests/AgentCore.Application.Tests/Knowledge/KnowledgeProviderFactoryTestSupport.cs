@@ -43,7 +43,7 @@ namespace AgentCore.Application.Tests.Knowledge
         {
             return KnowledgeProviderFactory.Create(
                         port, knowledge, "agent-under-test", new SourceLocatorCitationFormatter(), loggers: null);
-            }
+        }
 
         /// <summary>Every message text of a returned context, in one string.</summary>
         internal static string Merged(AIContext context)

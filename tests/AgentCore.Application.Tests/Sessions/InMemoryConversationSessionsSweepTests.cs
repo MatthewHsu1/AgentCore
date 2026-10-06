@@ -144,9 +144,9 @@ namespace AgentCore.Application.Tests.Sessions
                 string stale = Directory.CreateDirectory(Path.Combine(_root, "stale")).FullName;
                 File.WriteAllText(ConversationWorkspace.MarkerPathFor(stale), string.Empty);
                 string nested = Directory.CreateDirectory(Path.Combine(stale, "a", "b")).FullName;
-                Directory.CreateSymbolicLink(Path.Combine(stale, "dirlink"), outside);
-                Directory.CreateSymbolicLink(Path.Combine(nested, "deeplink"), outsideSub);
-                File.CreateSymbolicLink(Path.Combine(stale, "filelink"), precious);
+                _ = Directory.CreateSymbolicLink(Path.Combine(stale, "dirlink"), outside);
+                _ = Directory.CreateSymbolicLink(Path.Combine(nested, "deeplink"), outsideSub);
+                _ = File.CreateSymbolicLink(Path.Combine(stale, "filelink"), precious);
                 Directory.SetLastWriteTimeUtc(stale, clock.GetUtcNow().UtcDateTime - TimeSpan.FromHours(1));
 
                 using InMemoryConversationSessions sessions = new(SingleEntrySessionFactories.Of(Factory()), IdleTimeout, clock);
@@ -281,7 +281,7 @@ namespace AgentCore.Application.Tests.Sessions
             try
             {
                 string link = Path.Combine(_root, "linked");
-                Directory.CreateSymbolicLink(link, target);
+                _ = Directory.CreateSymbolicLink(link, target);
                 File.WriteAllText(Path.Combine(target, "kept.txt"), "kept");
 
                 FakeTimeProvider clock = Clock();

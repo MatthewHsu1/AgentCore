@@ -2,7 +2,6 @@ using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Runtime.Compaction;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Tests.Transcript;
-using Microsoft.Agents.AI.Compaction;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Application.Runtime.Session;
@@ -122,7 +121,10 @@ namespace AgentCore.Application.Tests.Runtime.Compaction
                 throw new NotSupportedException("Summarisation runs the buffered path only.");
             }
 
-            public object? GetService(Type serviceType, object? serviceKey = null) => null;
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return null;
+            }
 
             public void Dispose()
             {

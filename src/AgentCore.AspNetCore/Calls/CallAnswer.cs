@@ -20,9 +20,15 @@ namespace AgentCore.AspNetCore.Calls
     {
         internal static CallAnswer Withdrawn { get; } = new(CallAnswerKind.Withdrawn, string.Empty);
 
-        internal static CallAnswer Answered(string text) => new(CallAnswerKind.Answered, text);
+        internal static CallAnswer Answered(string text)
+        {
+            return new(CallAnswerKind.Answered, text);
+        }
 
         /// <summary>The answer of an ask that could not run: the vendor speaks <paramref name="fallbackReply"/>.</summary>
-        internal static CallAnswer FallbackOf(string fallbackReply) => new(CallAnswerKind.Fallback, fallbackReply);
+        internal static CallAnswer FallbackOf(string fallbackReply)
+        {
+            return new(CallAnswerKind.Fallback, fallbackReply);
+        }
     }
 }

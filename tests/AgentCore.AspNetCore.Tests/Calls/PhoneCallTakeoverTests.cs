@@ -49,7 +49,7 @@ namespace AgentCore.AspNetCore.Tests.Calls
 
             // One call: one start and one end, its length counted from the older connection's start.
             Assert.Equal(new CallEnd("call-7", 12, "close_requested"), Assert.Single(hook.Of<ConversationEnded>()).Call);
-            Assert.Single(hook.Of<CallStarted>());
+            _ = Assert.Single(hook.Of<CallStarted>());
         }
 
         // A call that already left its conversation (its end or close began) is not taken over: the conversation is

@@ -70,7 +70,7 @@ namespace AgentCore.Application.Tests.Hooks
         {
             AIFunction slow = AIFunctionFactory.Create(async (CancellationToken token) => { await Task.Delay(Timeout.Infinite, token); return "late"; }, "slow");
             TimeLimitedTool limited = new(slow, TimeSpan.FromMilliseconds(20));
-            AIFunctionArguments arguments = new();
+            AIFunctionArguments arguments = [];
 
             _ = await limited.InvokeAsync(arguments, Ct);
 
@@ -85,8 +85,8 @@ namespace AgentCore.Application.Tests.Hooks
             HybridCache cache = services.BuildServiceProvider().GetRequiredService<HybridCache>();
             CachedTool cached = new(AIFunctionFactory.Create(() => "fresh", "lookup"), cache, TimeSpan.FromMinutes(1));
 
-            AIFunctionArguments first = new();
-            AIFunctionArguments second = new();
+            AIFunctionArguments first = [];
+            AIFunctionArguments second = [];
             _ = await cached.InvokeAsync(first, Ct);
             _ = await cached.InvokeAsync(second, Ct);
 

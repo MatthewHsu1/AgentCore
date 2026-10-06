@@ -198,7 +198,6 @@ namespace AgentCore.Application.Hooks.Layers
                         {
                             foreach (ChatResponseUpdate update in seen)
                             {
-                                yielded = true;
                                 yield return update;
                             }
                         }
@@ -230,6 +229,9 @@ namespace AgentCore.Application.Hooks.Layers
             }
         }
 
-        private static TurnInvocation? Turn() => TurnInvocation.From(AIAgent.CurrentRunContext?.RunOptions);
+        private static TurnInvocation? Turn()
+        {
+            return TurnInvocation.From(AIAgent.CurrentRunContext?.RunOptions);
+        }
     }
 }

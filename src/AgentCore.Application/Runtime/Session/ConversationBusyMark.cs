@@ -109,7 +109,7 @@ namespace AgentCore.Application.Runtime.Session
         internal async ValueTask EnterRequestAsync(long started, CancellationToken cancellationToken)
         {
             TimeSpan left = WaitLimit - _session.Time.GetElapsedTime(started);
-            
+
             if (left <= TimeSpan.Zero)
             {
                 throw Refuse(_session);

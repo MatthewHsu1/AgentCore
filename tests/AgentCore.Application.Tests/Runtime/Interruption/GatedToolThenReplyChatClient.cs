@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using AgentCore.Application.Tests.Fakes;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.Application.Tests.Runtime

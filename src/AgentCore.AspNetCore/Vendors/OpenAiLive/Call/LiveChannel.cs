@@ -35,7 +35,10 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         }
 
         /// <summary>Lets the call transfer. A transfer sent before this answers as not supported.</summary>
-        internal void Transfers(LiveTransfer transfer) => Volatile.Write(ref _transfer, transfer);
+        internal void Transfers(LiveTransfer transfer)
+        {
+            Volatile.Write(ref _transfer, transfer);
+        }
 
         /// <summary>On <c>session.started</c>, before the greeting: tells the context that waited, then each later one at once.</summary>
         /// <param name="tell">Sends one piece of context to GPT-Live.</param>

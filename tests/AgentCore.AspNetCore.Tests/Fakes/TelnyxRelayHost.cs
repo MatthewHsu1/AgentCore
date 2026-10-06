@@ -37,7 +37,9 @@ namespace AgentCore.AspNetCore.Tests.Fakes
 
         /// <summary>A Telnyx adapter that holds <see cref="RelayKey"/>, as a host's secret resolver would give it.</summary>
         public static TelnyxRelayConversationAdapter KeyedAdapter()
-            => new(() => new MapSecretResolver().With(KnownSecrets.TelnyxRelayKeyName, RelayKey));
+        {
+            return new(() => new MapSecretResolver().With(KnownSecrets.TelnyxRelayKeyName, RelayKey));
+        }
 
         private readonly WebApplication _app;
         private readonly HttpClient _client;

@@ -48,7 +48,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             Task first = await Task.WhenAny(tool.Cancelled.Task, Task.Delay(TimeSpan.FromSeconds(3), Ct));
             bool cancelled = first == tool.Cancelled.Task;
-            tool.Release.TrySetResult();
+            _ = tool.Release.TrySetResult();
             try
             {
                 _ = await run;
@@ -100,7 +100,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             Task first = await Task.WhenAny(tool.Cancelled.Task, Task.Delay(TimeSpan.FromSeconds(3), Ct));
             bool cancelled = first == tool.Cancelled.Task;
-            tool.Release.TrySetResult();
+            _ = tool.Release.TrySetResult();
             await session.DisposeAsync();
 
             Assert.True(cancelled, "the conversation ended 30 s ago, yet the background child's tool still ran");

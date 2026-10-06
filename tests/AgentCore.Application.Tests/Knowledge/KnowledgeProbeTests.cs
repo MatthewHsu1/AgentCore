@@ -13,7 +13,6 @@ using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Xunit;
 using AgentCore.Application.Runtime.Clarification;
-using AgentCore.Application.Runtime.ToolCalls;
 
 namespace AgentCore.Application.Tests.Knowledge
 {
