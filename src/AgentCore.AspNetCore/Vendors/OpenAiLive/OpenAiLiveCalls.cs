@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using AgentCore.Application.Conversation.Actions;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.OpenAiLive.Call;
 using AgentCore.Domain.Audit;
@@ -25,12 +24,6 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
         private readonly ConcurrentDictionary<OpenAiLiveCall, Task> _running = new();
 
         private readonly CancellationTokenSource _stopping = new();
-
-        /// <summary>
-        /// Gets the host's own transfer, or <see langword="null"/> when it registered none. It comes from the root
-        /// services: a call outlives the request that started it, so a scoped one would be used after its scope ended.
-        /// </summary>
-        internal ICallTransfer? HostTransfer => services.GetService<ICallTransfer>();
 
         private readonly Lock _gate = new();
 
@@ -65,12 +58,21 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
             return _webhooks.TryAdd(webhookId, now);
         }
 
-        internal bool TryClaimCall(string callId) => _claimed.TryAdd(callId, 0);
+        internal bool TryClaimCall(string callId)
+        {
+            return _claimed.TryAdd(callId, 0);
+        }
 
-        internal void ReleaseCall(string callId) => _claimed.TryRemove(callId, out _);
+        internal void ReleaseCall(string callId)
+        {
+            _claimed.TryRemove(callId, out _);
+        }
 
         /// <summary>Forgets a webhook id whose request failed, so the retry OpenAI sends under the same id is processed.</summary>
-        internal void ReleaseWebhook(string webhookId) => _webhooks.TryRemove(webhookId, out _);
+        internal void ReleaseWebhook(string webhookId)
+        {
+            _webhooks.TryRemove(webhookId, out _);
+        }
 
         /// <summary>
         /// Runs a call to its end. A call that arrives after the host began to stop is hung up and ended with cause

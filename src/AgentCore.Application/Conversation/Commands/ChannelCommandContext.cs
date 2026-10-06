@@ -1,13 +1,10 @@
-namespace AgentCore.Application.Conversation.Actions
+namespace AgentCore.Application.Conversation.Commands
 {
-    /// <summary>One transfer an <see cref="ICallTransfer"/> carries out.</summary>
-    public sealed record CallTransfer
+    /// <summary>The conversation an <see cref="IChannelCommandHandler{TCommand, TOutcome}"/> acts on.</summary>
+    public sealed record ChannelCommandContext
     {
-        /// <summary>Gets the conversation the call carries.</summary>
+        /// <summary>Gets the conversation the channel carries.</summary>
         public required string ConversationId { get; init; }
-
-        /// <summary>Gets the line, as the <see cref="TransferAction"/> named it.</summary>
-        public required Uri Target { get; init; }
 
         /// <summary>
         /// Gets the call's own transport headers, such as SIP headers, by name, case-insensitive. A host finds its phone

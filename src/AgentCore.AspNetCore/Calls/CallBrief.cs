@@ -24,7 +24,10 @@ namespace AgentCore.AspNetCore.Calls
             }
         }
 
-        internal void Clear() => host.Briefs?.Clear(conversationId);
+        internal void Clear()
+        {
+            host.Briefs?.Clear(conversationId);
+        }
 
         // A newer session that another call holds carries that call's brief, so only then is it left in place.
         internal void Forget(ConversationSession? holder, ConversationSession own)

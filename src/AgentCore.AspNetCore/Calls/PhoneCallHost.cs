@@ -1,4 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.BuiltIn;
 using AgentCore.Application.Hooks.Engine;
@@ -31,6 +32,19 @@ namespace AgentCore.AspNetCore.Calls
         /// </summary>
         internal bool FrontVoice { get; init; }
 
+        /// <summary>Gets the root services, where the host's command handlers are found, or <see langword="null"/> for none.</summary>
+        internal IServiceProvider? Services { get; init; }
+
+        /// <summary>
+        /// Gets the host's handler for one command, or <see langword="null"/> when it registered none. It comes from the
+        /// root services: a call outlives the request that started it, so a scoped one would be used after its scope ended.
+        /// </summary>
+        internal IChannelCommandHandler<TCommand, TOutcome>? HandlerFor<TCommand, TOutcome>()
+            where TCommand : ChannelCommand
+        {
+            return Services?.GetService<IChannelCommandHandler<TCommand, TOutcome>>();
+        }
+
         /// <summary>Reads the host's shared parts from a started container.</summary>
         internal static PhoneCallHost From(IServiceProvider services, ConversationProviderConfiguration? configuration)
         {
@@ -42,7 +56,10 @@ namespace AgentCore.AspNetCore.Calls
                 boot.Hooks,
                 services.GetRequiredService<TimeProvider>(),
                 services.GetRequiredService<ILoggerFactory>().CreateLogger("AgentCore.Calls"),
-                configuration?.AnswerSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : GatePoint.BeforeCall.Deadline);
+                configuration?.AnswerSeconds is { } seconds ? TimeSpan.FromSeconds(seconds) : GatePoint.BeforeCall.Deadline)
+            {
+                Services = boot.Services,
+            };
         }
     }
 }

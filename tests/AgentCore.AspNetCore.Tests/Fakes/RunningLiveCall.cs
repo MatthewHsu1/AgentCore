@@ -1,5 +1,5 @@
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Conversation.Actions;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Hooks;
 using AgentCore.AspNetCore.Calls;
 using AgentCore.AspNetCore.Vendors.OpenAiLive;
@@ -21,6 +21,9 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public static readonly DateTimeOffset Noon = new(2026, 10, 4, 12, 0, 0, TimeSpan.Zero);
 
         public const string Greeting = "Greet the caller, then pause and listen.";
+
+        /// <summary>The first event every recorded GPT-Live session sent.</summary>
+        public const string Started = """{"type":"session.started"}""";
 
         private RunningLiveCall(PhoneCallHarness harness, FakeTimeProvider time, PhoneCall call, FakeSideband sideband)
         {
@@ -48,13 +51,16 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         public TaskCompletionSource<Uri> Referred { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         /// <summary>
-        /// Starts the call. With <paramref name="refers"/> and <paramref name="hostAnswers"/> unset the call cannot
-        /// transfer. <paramref name="refers"/> transfers by refer, and each refer answers it; <paramref name="hostAnswers"/>
-        /// transfers through a host's own <see cref="ICallTransfer"/>, which answers it.
+        /// Starts the call, which GPT-Live opens with <see cref="Started"/> unless <paramref name="started"/> is false.
+        /// With <paramref name="refers"/> and <paramref name="hostAnswers"/> unset the call cannot transfer.
+        /// <paramref name="refers"/> transfers by refer, and each refer answers it; <paramref name="hostAnswers"/>
+        /// transfers through a host's own <see cref="IChannelCommandHandler{TCommand, TOutcome}"/>, which answers it.
+        /// The call's channel is attached before the loop runs, as the webhook attaches it.
         /// </summary>
         public static async Task<RunningLiveCall> StartAsync(
             IChatClient model, IReadOnlyList<AgentHook> hooks, string yaml = PhoneCallHarness.OneEntryYaml, ILogger? logger = null, FakeSideband? sideband = null,
-            string? greeting = Greeting, Func<ToolConfiguration, AITool?>? tools = null, bool? refers = null, CallTransferOutcome? hostAnswers = null)
+            string? greeting = Greeting, Func<ToolConfiguration, AITool?>? tools = null, bool? refers = null, CallTransferOutcome? hostAnswers = null,
+            bool started = true)
         {
             CancellationToken ct = TestContext.Current.CancellationToken;
             FakeTimeProvider time = new(Noon) { Zone = TimeZoneInfo.Utc };
@@ -69,7 +75,14 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                 (null, { } answer) => new LiveReferTransfer((target, _) => running.ReferAsync(target, answer), OpenAiLiveSettings.DefaultTransferWait, logger, call.CallId),
                 _ => null,
             };
-            OpenAiLiveCall live = new(call, running.Sideband, running.HangUpAsync, logger, greeting, line);
+            LiveChannel channel = new(call.CallId, logger);
+            call.Channel.Use(channel, call.Session);
+            OpenAiLiveCall live = new(call, channel, running.Sideband, running.HangUpAsync, logger, greeting, line);
+            if (started)
+            {
+                running.Sideband.Push([Started]);
+            }
+
             running.Loop = live.RunAsync(ct);
             return running;
         }
@@ -93,9 +106,9 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             return Task.FromResult(true);
         }
 
-        private sealed class AnsweringTransfer(RunningLiveCall running, CallTransferOutcome outcome) : ICallTransfer
+        private sealed class AnsweringTransfer(RunningLiveCall running, CallTransferOutcome outcome) : IChannelCommandHandler<TransferCommand, CallTransferOutcome>
         {
-            public Task<CallTransferOutcome> TransferAsync(CallTransfer transfer, CancellationToken cancellationToken)
+            public Task<CallTransferOutcome> HandleAsync(TransferCommand transfer, ChannelCommandContext context, CancellationToken cancellationToken)
             {
                 _ = running.Referred.TrySetResult(transfer.Target);
                 return Task.FromResult(outcome);

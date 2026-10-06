@@ -78,13 +78,15 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         /// <summary>Starts the host.</summary>
         /// <param name="attachFault">Names the fault the sideband attach of a call throws, or <see langword="null"/> for none.</param>
         /// <param name="configure">Anything else the test binds on the options, such as a conversation store.</param>
+        /// <param name="attachHeldUntil">Holds each sideband attach until it completes, or <see langword="null"/> to attach at once.</param>
         public static async Task<OpenAiLiveHost> StartAsync(
             IChatClient model,
             IReadOnlyList<AgentHook> hooks,
             MapSecretResolver? secrets = null,
             string yaml = LiveYaml,
             Func<LiveAttach, Exception?>? attachFault = null,
-            Action<AgentCoreOptions>? configure = null)
+            Action<AgentCoreOptions>? configure = null,
+            Task? attachHeldUntil = null)
         {
             WebApplicationBuilder builder = WebApplication.CreateSlimBuilder();
             _ = builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -97,21 +99,28 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             OpenAiLiveConversationAdapter adapter = new(
                 pipeline,
                 secrets ?? new MapSecretResolver().With("openai-api-key", ApiKey).With("openai-webhook-secret", WebhookSecret),
-                (attach, token) =>
+                async (attach, token) =>
                 {
                     if (attachFault?.Invoke(attach) is { } fault)
                     {
                         throw fault;
                     }
 
+                    if (attachHeldUntil is not null)
+                    {
+                        await attachHeldUntil.WaitAsync(token);
+                    }
+
+                    // A real sideband opens with session.started (docs/probes/live-transfer-t1/t1-none.log, 0 ms after attach).
                     FakeSideband sideband = new();
+                    sideband.Push([RunningLiveCall.Started]);
                     lock (attached)
                     {
                         attached.Add(sideband);
                     }
 
                     _ = host?.FirstAttach.TrySetResult(sideband);
-                    return ValueTask.FromResult<ILiveSideband>(sideband);
+                    return (ILiveSideband)sideband;
                 },
                 new Uri("https://api.openai.test/"));
 

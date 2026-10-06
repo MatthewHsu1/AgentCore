@@ -82,7 +82,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         {
             PhoneCall call = (await PhoneCall.AdmitAsync(harness.Host, PhoneCallHarness.Offer(), Ct)).Call!;
             await call.StartAsync(Ct);
-            return new OpenAiLiveCall(call, sideband, hangUp, logger ?? NullLogger.Instance);
+            return new OpenAiLiveCall(call, new LiveChannel(call.CallId, NullLogger.Instance), sideband, hangUp, logger ?? NullLogger.Instance);
         }
     }
 }

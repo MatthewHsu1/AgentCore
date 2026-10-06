@@ -56,5 +56,8 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
 
         [LoggerMessage(EventId = 327, Level = LogLevel.Warning, Message = "transferring the call {CallId} failed: {Why}. The caller is told, and the call goes on.")]
         internal static partial void TransferFailedGoingOn(ILogger logger, string callId, string why);
+
+        [LoggerMessage(EventId = 328, Level = LogLevel.Warning, Message = "a fact for the voice of the call {CallId} could not be sent, so the voice goes on without it.")]
+        internal static partial void VoiceContextFailed(ILogger logger, string callId, Exception fault);
     }
 }

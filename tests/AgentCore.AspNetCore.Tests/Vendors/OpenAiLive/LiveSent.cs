@@ -30,11 +30,14 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
                 - { id: done, agent: only, terminal: true }
         """;
 
-        // Every call opens with the session instructions (see TheCallTellsGptLiveToGreetTheCallerFirst).
+        // Every call opens with the session instructions and the greeting (see TheCallTellsGptLiveToGreetTheCallerFirst).
         internal static IEnumerable<JsonObject> AfterTheGreeting(RunningLiveCall running) =>
-            running.Sideband.Sent.Where(sent => (string?)sent["type"] != "session.instructions.append");
+            running.Sideband.Sent.Where(sent => (string?)sent["type"] != "session.instructions.append" && !IsGreeting(sent));
 
-        internal static bool IsCommentary(JsonObject sent) => (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend;
+        // An answer's commentary names its delegation; the greeting's names none.
+        internal static bool IsCommentary(JsonObject sent) => (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend && sent["delegation_id"] is not null;
+
+        private static bool IsGreeting(JsonObject sent) => (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend && sent["delegation_id"] is null;
 
         internal static string? TypeOf(string json) => (string?)JsonNode.Parse(json)!["type"];
 

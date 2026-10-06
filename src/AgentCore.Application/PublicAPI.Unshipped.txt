@@ -3114,72 +3114,81 @@ override sealed AgentCore.Application.Hooks.Notices.CallEnded.Equals(AgentCore.A
 static AgentCore.Application.Hooks.Notices.CallEnded.operator !=(AgentCore.Application.Hooks.Notices.CallEnded? left, AgentCore.Application.Hooks.Notices.CallEnded? right) -> bool
 static AgentCore.Application.Hooks.Notices.CallEnded.operator ==(AgentCore.Application.Hooks.Notices.CallEnded? left, AgentCore.Application.Hooks.Notices.CallEnded? right) -> bool
 virtual AgentCore.Application.Hooks.AgentHook.OnCallEndedAsync(AgentCore.Application.Hooks.Notices.CallEnded! notice, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
-AgentCore.Application.Conversation.Actions.ConversationAction
-AgentCore.Application.Conversation.Actions.ConversationAction.ConversationAction(AgentCore.Application.Conversation.Actions.ConversationAction! original) -> void
-AgentCore.Application.Conversation.Actions.ConversationActionResult
-AgentCore.Application.Conversation.Actions.ConversationActionResult.Ending = 2 -> AgentCore.Application.Conversation.Actions.ConversationActionResult
-AgentCore.Application.Conversation.Actions.ConversationActionResult.NotSupported = 1 -> AgentCore.Application.Conversation.Actions.ConversationActionResult
-AgentCore.Application.Conversation.Actions.ConversationActionResult.Scheduled = 0 -> AgentCore.Application.Conversation.Actions.ConversationActionResult
-AgentCore.Application.Conversation.Actions.EndConversationAction
-AgentCore.Application.Conversation.Actions.EndConversationAction.Deconstruct(out AgentCore.Domain.Audit.ConversationEndReason Reason) -> void
-AgentCore.Application.Conversation.Actions.EndConversationAction.EndConversationAction(AgentCore.Domain.Audit.ConversationEndReason Reason) -> void
-AgentCore.Application.Conversation.Actions.EndConversationAction.Equals(AgentCore.Application.Conversation.Actions.EndConversationAction? other) -> bool
-AgentCore.Application.Conversation.Actions.EndConversationAction.Reason.get -> AgentCore.Domain.Audit.ConversationEndReason
-AgentCore.Application.Conversation.Actions.EndConversationAction.Reason.init -> void
-AgentCore.Application.Conversation.Actions.IConversationControl
-AgentCore.Application.Conversation.Actions.IConversationControl.Request(AgentCore.Application.Conversation.Actions.ConversationAction! action) -> AgentCore.Application.Conversation.Actions.ConversationActionResult
-AgentCore.Application.Conversation.Actions.TransferAction
-AgentCore.Application.Conversation.Actions.TransferAction.Equals(AgentCore.Application.Conversation.Actions.TransferAction? other) -> bool
-AgentCore.Application.Conversation.Actions.TransferAction.Target.get -> System.Uri!
-AgentCore.Application.Conversation.Actions.TransferAction.TransferAction(System.Uri! target) -> void
-AgentCore.Application.Runtime.Session.ConversationSession.Request(AgentCore.Application.Conversation.Actions.ConversationAction! action) -> AgentCore.Application.Conversation.Actions.ConversationActionResult
-AgentCore.Application.Tools.ToolCallScope.Conversation.get -> AgentCore.Application.Conversation.Actions.IConversationControl!
-AgentCore.Application.Tools.ToolCallScope.Conversation.init -> void
-abstract AgentCore.Application.Conversation.Actions.ConversationAction.<Clone>$() -> AgentCore.Application.Conversation.Actions.ConversationAction!
-override AgentCore.Application.Conversation.Actions.ConversationAction.Equals(object? obj) -> bool
-override AgentCore.Application.Conversation.Actions.ConversationAction.GetHashCode() -> int
-override AgentCore.Application.Conversation.Actions.ConversationAction.ToString() -> string!
-override AgentCore.Application.Conversation.Actions.EndConversationAction.<Clone>$() -> AgentCore.Application.Conversation.Actions.EndConversationAction!
-override AgentCore.Application.Conversation.Actions.EndConversationAction.Equals(object? obj) -> bool
-override AgentCore.Application.Conversation.Actions.EndConversationAction.GetHashCode() -> int
-override AgentCore.Application.Conversation.Actions.EndConversationAction.ToString() -> string!
-override AgentCore.Application.Conversation.Actions.TransferAction.<Clone>$() -> AgentCore.Application.Conversation.Actions.TransferAction!
-override AgentCore.Application.Conversation.Actions.TransferAction.Equals(object? obj) -> bool
-override AgentCore.Application.Conversation.Actions.TransferAction.GetHashCode() -> int
-override AgentCore.Application.Conversation.Actions.TransferAction.ToString() -> string!
-override sealed AgentCore.Application.Conversation.Actions.EndConversationAction.Equals(AgentCore.Application.Conversation.Actions.ConversationAction? other) -> bool
-override sealed AgentCore.Application.Conversation.Actions.TransferAction.Equals(AgentCore.Application.Conversation.Actions.ConversationAction? other) -> bool
-static AgentCore.Application.Conversation.Actions.ConversationAction.operator ==(AgentCore.Application.Conversation.Actions.ConversationAction? left, AgentCore.Application.Conversation.Actions.ConversationAction? right) -> bool
-static AgentCore.Application.Conversation.Actions.ConversationAction.operator !=(AgentCore.Application.Conversation.Actions.ConversationAction? left, AgentCore.Application.Conversation.Actions.ConversationAction? right) -> bool
-static AgentCore.Application.Conversation.Actions.EndConversationAction.operator ==(AgentCore.Application.Conversation.Actions.EndConversationAction? left, AgentCore.Application.Conversation.Actions.EndConversationAction? right) -> bool
-static AgentCore.Application.Conversation.Actions.EndConversationAction.operator !=(AgentCore.Application.Conversation.Actions.EndConversationAction? left, AgentCore.Application.Conversation.Actions.EndConversationAction? right) -> bool
-static AgentCore.Application.Conversation.Actions.TransferAction.operator ==(AgentCore.Application.Conversation.Actions.TransferAction? left, AgentCore.Application.Conversation.Actions.TransferAction? right) -> bool
-static AgentCore.Application.Conversation.Actions.TransferAction.operator !=(AgentCore.Application.Conversation.Actions.TransferAction? left, AgentCore.Application.Conversation.Actions.TransferAction? right) -> bool
-virtual AgentCore.Application.Conversation.Actions.ConversationAction.EqualityContract.get -> System.Type!
-virtual AgentCore.Application.Conversation.Actions.ConversationAction.Equals(AgentCore.Application.Conversation.Actions.ConversationAction? other) -> bool
-virtual AgentCore.Application.Conversation.Actions.ConversationAction.PrintMembers(System.Text.StringBuilder! builder) -> bool
 const AgentCore.Application.Secrets.KnownSecrets.TelnyxRelayKeyName = "telnyx-relay-key" -> string!
 const AgentCore.Application.Secrets.KnownSecrets.TelnyxRelayKeyVariable = "TELNYX_RELAY_KEY" -> string!
 static readonly AgentCore.Application.Secrets.KnownSecrets.TelnyxRelay -> AgentCore.Application.Secrets.SecretName!
-AgentCore.Application.Conversation.Actions.TransferAction.IfFailed.get -> string?
-AgentCore.Application.Conversation.Actions.TransferAction.IfFailed.init -> void
-AgentCore.Application.Conversation.Actions.CallTransfer
-AgentCore.Application.Conversation.Actions.CallTransfer.<Clone>$() -> AgentCore.Application.Conversation.Actions.CallTransfer!
-AgentCore.Application.Conversation.Actions.CallTransfer.CallTransfer() -> void
-AgentCore.Application.Conversation.Actions.CallTransfer.ConversationId.get -> string!
-AgentCore.Application.Conversation.Actions.CallTransfer.ConversationId.init -> void
-AgentCore.Application.Conversation.Actions.CallTransfer.Equals(AgentCore.Application.Conversation.Actions.CallTransfer? other) -> bool
-AgentCore.Application.Conversation.Actions.CallTransfer.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
-AgentCore.Application.Conversation.Actions.CallTransfer.Headers.init -> void
-AgentCore.Application.Conversation.Actions.CallTransferOutcome
-AgentCore.Application.Conversation.Actions.CallTransferOutcome.NotTaken = 0 -> AgentCore.Application.Conversation.Actions.CallTransferOutcome
-AgentCore.Application.Conversation.Actions.CallTransferOutcome.Taken = 1 -> AgentCore.Application.Conversation.Actions.CallTransferOutcome
-AgentCore.Application.Conversation.Actions.CallTransfer.Target.get -> System.Uri!
-AgentCore.Application.Conversation.Actions.CallTransfer.Target.init -> void
-AgentCore.Application.Conversation.Actions.ICallTransfer
-AgentCore.Application.Conversation.Actions.ICallTransfer.TransferAsync(AgentCore.Application.Conversation.Actions.CallTransfer! transfer, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<AgentCore.Application.Conversation.Actions.CallTransferOutcome>!
-override AgentCore.Application.Conversation.Actions.CallTransfer.Equals(object? obj) -> bool
-override AgentCore.Application.Conversation.Actions.CallTransfer.GetHashCode() -> int
-override AgentCore.Application.Conversation.Actions.CallTransfer.ToString() -> string!
-static AgentCore.Application.Conversation.Actions.CallTransfer.operator ==(AgentCore.Application.Conversation.Actions.CallTransfer? left, AgentCore.Application.Conversation.Actions.CallTransfer? right) -> bool
-static AgentCore.Application.Conversation.Actions.CallTransfer.operator !=(AgentCore.Application.Conversation.Actions.CallTransfer? left, AgentCore.Application.Conversation.Actions.CallTransfer? right) -> bool
+abstract AgentCore.Application.Conversation.Commands.ChannelCommand.<Clone>$() -> AgentCore.Application.Conversation.Commands.ChannelCommand!
+AgentCore.Application.Conversation.Commands.AddVoiceContextCommand
+AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.AddVoiceContextCommand(string! text) -> void
+AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.Equals(AgentCore.Application.Conversation.Commands.AddVoiceContextCommand? other) -> bool
+AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.Text.get -> string!
+AgentCore.Application.Conversation.Commands.CallTransferOutcome
+AgentCore.Application.Conversation.Commands.CallTransferOutcome.NotTaken = 0 -> AgentCore.Application.Conversation.Commands.CallTransferOutcome
+AgentCore.Application.Conversation.Commands.CallTransferOutcome.Taken = 1 -> AgentCore.Application.Conversation.Commands.CallTransferOutcome
+AgentCore.Application.Conversation.Commands.ChannelCommand
+AgentCore.Application.Conversation.Commands.ChannelCommand.ChannelCommand(AgentCore.Application.Conversation.Commands.ChannelCommand! original) -> void
+AgentCore.Application.Conversation.Commands.ChannelCommandContext
+AgentCore.Application.Conversation.Commands.ChannelCommandContext.<Clone>$() -> AgentCore.Application.Conversation.Commands.ChannelCommandContext!
+AgentCore.Application.Conversation.Commands.ChannelCommandContext.ChannelCommandContext() -> void
+AgentCore.Application.Conversation.Commands.ChannelCommandContext.ConversationId.get -> string!
+AgentCore.Application.Conversation.Commands.ChannelCommandContext.ConversationId.init -> void
+AgentCore.Application.Conversation.Commands.ChannelCommandContext.Equals(AgentCore.Application.Conversation.Commands.ChannelCommandContext? other) -> bool
+AgentCore.Application.Conversation.Commands.ChannelCommandContext.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+AgentCore.Application.Conversation.Commands.ChannelCommandContext.Headers.init -> void
+AgentCore.Application.Conversation.Commands.ChannelCommandResult
+AgentCore.Application.Conversation.Commands.ChannelCommandResult.Ending = 2 -> AgentCore.Application.Conversation.Commands.ChannelCommandResult
+AgentCore.Application.Conversation.Commands.ChannelCommandResult.NotSupported = 1 -> AgentCore.Application.Conversation.Commands.ChannelCommandResult
+AgentCore.Application.Conversation.Commands.ChannelCommandResult.Scheduled = 0 -> AgentCore.Application.Conversation.Commands.ChannelCommandResult
+AgentCore.Application.Conversation.Commands.EndCommand
+AgentCore.Application.Conversation.Commands.EndCommand.Deconstruct(out AgentCore.Domain.Audit.ConversationEndReason Reason) -> void
+AgentCore.Application.Conversation.Commands.EndCommand.EndCommand(AgentCore.Domain.Audit.ConversationEndReason Reason) -> void
+AgentCore.Application.Conversation.Commands.EndCommand.Equals(AgentCore.Application.Conversation.Commands.EndCommand? other) -> bool
+AgentCore.Application.Conversation.Commands.EndCommand.Reason.get -> AgentCore.Domain.Audit.ConversationEndReason
+AgentCore.Application.Conversation.Commands.EndCommand.Reason.init -> void
+AgentCore.Application.Conversation.Commands.IChannelCommandHandler<TCommand, TOutcome>
+AgentCore.Application.Conversation.Commands.IChannelCommandHandler<TCommand, TOutcome>.HandleAsync(TCommand! command, AgentCore.Application.Conversation.Commands.ChannelCommandContext! context, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.Task<TOutcome>!
+AgentCore.Application.Conversation.Commands.IChannelControl
+AgentCore.Application.Conversation.Commands.IChannelControl.Send(AgentCore.Application.Conversation.Commands.ChannelCommand! command) -> AgentCore.Application.Conversation.Commands.ChannelCommandResult
+AgentCore.Application.Conversation.Commands.TransferCommand
+AgentCore.Application.Conversation.Commands.TransferCommand.Equals(AgentCore.Application.Conversation.Commands.TransferCommand? other) -> bool
+AgentCore.Application.Conversation.Commands.TransferCommand.IfFailed.get -> string?
+AgentCore.Application.Conversation.Commands.TransferCommand.IfFailed.init -> void
+AgentCore.Application.Conversation.Commands.TransferCommand.Target.get -> System.Uri!
+AgentCore.Application.Conversation.Commands.TransferCommand.TransferCommand(System.Uri! target) -> void
+AgentCore.Application.Runtime.Session.ConversationSession.Send(AgentCore.Application.Conversation.Commands.ChannelCommand! command) -> AgentCore.Application.Conversation.Commands.ChannelCommandResult
+AgentCore.Application.Tools.ToolCallScope.Channel.get -> AgentCore.Application.Conversation.Commands.IChannelControl!
+AgentCore.Application.Tools.ToolCallScope.Channel.init -> void
+override AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.<Clone>$() -> AgentCore.Application.Conversation.Commands.AddVoiceContextCommand!
+override AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.Equals(object? obj) -> bool
+override AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.GetHashCode() -> int
+override AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.ToString() -> string!
+override AgentCore.Application.Conversation.Commands.ChannelCommandContext.Equals(object? obj) -> bool
+override AgentCore.Application.Conversation.Commands.ChannelCommandContext.GetHashCode() -> int
+override AgentCore.Application.Conversation.Commands.ChannelCommandContext.ToString() -> string!
+override AgentCore.Application.Conversation.Commands.ChannelCommand.Equals(object? obj) -> bool
+override AgentCore.Application.Conversation.Commands.ChannelCommand.GetHashCode() -> int
+override AgentCore.Application.Conversation.Commands.ChannelCommand.ToString() -> string!
+override AgentCore.Application.Conversation.Commands.EndCommand.<Clone>$() -> AgentCore.Application.Conversation.Commands.EndCommand!
+override AgentCore.Application.Conversation.Commands.EndCommand.Equals(object? obj) -> bool
+override AgentCore.Application.Conversation.Commands.EndCommand.GetHashCode() -> int
+override AgentCore.Application.Conversation.Commands.EndCommand.ToString() -> string!
+override AgentCore.Application.Conversation.Commands.TransferCommand.<Clone>$() -> AgentCore.Application.Conversation.Commands.TransferCommand!
+override AgentCore.Application.Conversation.Commands.TransferCommand.Equals(object? obj) -> bool
+override AgentCore.Application.Conversation.Commands.TransferCommand.GetHashCode() -> int
+override AgentCore.Application.Conversation.Commands.TransferCommand.ToString() -> string!
+override sealed AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.Equals(AgentCore.Application.Conversation.Commands.ChannelCommand? other) -> bool
+override sealed AgentCore.Application.Conversation.Commands.EndCommand.Equals(AgentCore.Application.Conversation.Commands.ChannelCommand? other) -> bool
+override sealed AgentCore.Application.Conversation.Commands.TransferCommand.Equals(AgentCore.Application.Conversation.Commands.ChannelCommand? other) -> bool
+static AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.operator ==(AgentCore.Application.Conversation.Commands.AddVoiceContextCommand? left, AgentCore.Application.Conversation.Commands.AddVoiceContextCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.AddVoiceContextCommand.operator !=(AgentCore.Application.Conversation.Commands.AddVoiceContextCommand? left, AgentCore.Application.Conversation.Commands.AddVoiceContextCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.ChannelCommandContext.operator ==(AgentCore.Application.Conversation.Commands.ChannelCommandContext? left, AgentCore.Application.Conversation.Commands.ChannelCommandContext? right) -> bool
+static AgentCore.Application.Conversation.Commands.ChannelCommandContext.operator !=(AgentCore.Application.Conversation.Commands.ChannelCommandContext? left, AgentCore.Application.Conversation.Commands.ChannelCommandContext? right) -> bool
+static AgentCore.Application.Conversation.Commands.ChannelCommand.operator ==(AgentCore.Application.Conversation.Commands.ChannelCommand? left, AgentCore.Application.Conversation.Commands.ChannelCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.ChannelCommand.operator !=(AgentCore.Application.Conversation.Commands.ChannelCommand? left, AgentCore.Application.Conversation.Commands.ChannelCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.EndCommand.operator ==(AgentCore.Application.Conversation.Commands.EndCommand? left, AgentCore.Application.Conversation.Commands.EndCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.EndCommand.operator !=(AgentCore.Application.Conversation.Commands.EndCommand? left, AgentCore.Application.Conversation.Commands.EndCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.TransferCommand.operator ==(AgentCore.Application.Conversation.Commands.TransferCommand? left, AgentCore.Application.Conversation.Commands.TransferCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.TransferCommand.operator !=(AgentCore.Application.Conversation.Commands.TransferCommand? left, AgentCore.Application.Conversation.Commands.TransferCommand? right) -> bool
+virtual AgentCore.Application.Conversation.Commands.ChannelCommand.EqualityContract.get -> System.Type!
+virtual AgentCore.Application.Conversation.Commands.ChannelCommand.Equals(AgentCore.Application.Conversation.Commands.ChannelCommand? other) -> bool
+virtual AgentCore.Application.Conversation.Commands.ChannelCommand.PrintMembers(System.Text.StringBuilder! builder) -> bool

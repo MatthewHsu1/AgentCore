@@ -24,7 +24,7 @@ namespace AgentCore.Application.Runtime.ToolCalls
             return new ToolCallScope(invocation.ConversationId, invocation.TurnIndex, invocation.Stage, invocation.Workspace)
             {
                 Items = invocation.Items,
-                Conversation = invocation.Control ?? UnattachedConversationControl.Instance,
+                Channel = invocation.Channel ?? UnattachedChannel.Instance,
             };
         }
     }

@@ -28,7 +28,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
 
             HttpResponseMessage response = await host.PostWebhookAsync(OpenAiLiveHost.IncomingCall("rtc_123"));
             FakeSideband sideband = await host.FirstAttach.Task;
-            JsonObject greet = await sideband.WaitForSentAsync(sent => (string?)sent["type"] == "session.instructions.append");
+            JsonObject greet = await sideband.WaitForSentAsync(sent => (string?)sent["type"] == "session.commentary.append");
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             RecordingLiveControl.Seen accept = Assert.Single(host.Control.Requests);

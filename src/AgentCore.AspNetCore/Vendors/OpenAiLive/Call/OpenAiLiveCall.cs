@@ -1,11 +1,10 @@
 using System.Globalization;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Hooks.Notices;
-using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.Calls;
 using AgentCore.AspNetCore.Vendors.OpenAiLive.Wire;
 using AgentCore.Domain.Audit;
-using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
@@ -43,9 +42,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 
         private readonly PhoneCall _call;
 
-        private readonly ILiveSideband _sideband;
+        private readonly LiveChannel _channel;
 
-        private readonly ILogger _logger;
+        private readonly ILiveSideband _sideband;
 
         private readonly string? _greeting;
 
@@ -68,12 +67,16 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 
         private long _eventIds;
 
+        private bool _started;
+
         /// <summary>
-        /// A <see langword="null"/> greeting leaves GPT-Live silent until the caller speaks. A <see langword="null"/>
+        /// <paramref name="channel"/> is the call's channel, already attached to its conversation. A
+        /// <see langword="null"/> greeting leaves GPT-Live silent until the caller speaks. A <see langword="null"/>
         /// transfer line leaves the call unable to transfer, so its conversation answers a transfer as not supported.
         /// </summary>
         internal OpenAiLiveCall(
             PhoneCall call,
+            LiveChannel channel,
             ILiveSideband sideband,
             Func<CancellationToken, Task<bool>> hangUp,
             ILogger logger,
@@ -81,8 +84,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
             ILiveTransferLine? transferLine = null)
         {
             _call = call;
+            _channel = channel;
             _sideband = sideband;
-            _logger = logger;
+            Logger = logger;
             _greeting = greeting;
             _end = new LiveCallEnd(call.Host.Time, call.CallId, logger);
             _hearing = new LiveHearing(call);
@@ -91,11 +95,15 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
                 : new LiveTransfer(transferLine, () => _end.Finished || call.HasEnded, () => _ = TransferAfterAnswersAsync());
             _answers = new LiveAnswers(call, _end, SendAsync, NextEventId, () => call.EngineEnded || _transfer?.Target is not null, logger);
             _finish = new LiveCallFinish(call, _end, _answers, hangUp, logger);
+            if (_transfer is not null)
+            {
+                channel.Transfers(_transfer);
+            }
         }
 
         internal string CallId => _call.CallId;
 
-        internal ILogger Logger => _logger;
+        internal ILogger Logger { get; }
 
         /// <summary>Disposes the send lock and the end timers. <see cref="RunAsync"/> calls this once every answer is done.</summary>
         public void Dispose()
@@ -107,41 +115,32 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         internal async Task RunAsync(CancellationToken cancellationToken)
         {
             Task<string?>? receiving = null;
+
             Volatile.Write(ref _looping, 1);
+
             _ = HangUpAfterAnyEngineEndAsync();
-            if (_transfer is not null)
-            {
-                _call.Channel.Use(_transfer, _call.Session);
-            }
 
             try
             {
-                // GPT-Live knows no date of its own: on a real call it named the wrong weekday.
-                if (_call.Session.Runner.ClockLine() is { } clock)
-                {
-                    await SendAsync(OpenAiLiveWire.SessionFact(NextEventId(), clock), cancellationToken).ConfigureAwait(false);
-                }
-
-                if (_greeting is not null)
-                {
-                    await SendAsync(OpenAiLiveWire.GreetFirst(NextEventId(), _greeting), cancellationToken).ConfigureAwait(false);
-                }
-
                 while (true)
                 {
                     receiving ??= _sideband.ReceiveAsync(cancellationToken).AsTask();
+
                     _ = await Task.WhenAny(receiving, _end.Requested).ConfigureAwait(false);
+
                     if (_end.Requested.IsCompleted)
                     {
                         (ConversationEndReason reason, string cause) = await _end.Requested.ConfigureAwait(false);
+
                         await HearReceivedAsync(receiving).ConfigureAwait(false);
+
                         await _hearing.FlushAsync().ConfigureAwait(false);
 
                         // The quiet wait after the last answer ends in the transfer when one waits, in place of the hang-up.
-                        if (cause == AgentEndedCause && _transfer is { Target: { } target })
+                        if (cause == AgentEndedCause && _transfer is { Pending: { } pending })
                         {
                             (receiving, bool goesOn) = await TransferAsync(
-                                _transfer, target, receiving is { IsCompleted: true } ? null : receiving, cancellationToken).ConfigureAwait(false);
+                                _transfer, pending, receiving is { IsCompleted: true } ? null : receiving, cancellationToken).ConfigureAwait(false);
 
                             if (goesOn)
                             {
@@ -151,13 +150,17 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
                             return;
                         }
 
-                        OpenAiLiveLog.HungUpBecause(_logger, CallId, cause);
+                        OpenAiLiveLog.HungUpBecause(Logger, CallId, cause);
+
                         await _finish.HangUpAndFinishAsync(reason, cause, cancellationToken).ConfigureAwait(false);
+
                         return;
                     }
 
                     string? json = await receiving.ConfigureAwait(false);
+
                     receiving = null;
+
                     if (json is null)
                     {
                         break;
@@ -170,6 +173,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
                 }
 
                 await _hearing.FlushAsync().ConfigureAwait(false);
+
                 await _finish.FinishAsync(ConversationEndReason.Faulted, SidebandClosedCause).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -178,15 +182,20 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
             }
             catch (Exception fault) when (fault is not OperationCanceledException)
             {
-                OpenAiLiveLog.SidebandFaulted(_logger, CallId, fault);
+                OpenAiLiveLog.SidebandFaulted(Logger, CallId, fault);
+
                 await _hearing.FlushAsync().ConfigureAwait(false);
+
                 await _finish.FinishAsync(ConversationEndReason.Faulted, SidebandFailedCause).ConfigureAwait(false);
             }
             finally
             {
                 _ = _loopLeft.TrySetResult();
+
                 await _answers.WhenAnsweredAsync().ConfigureAwait(false);
+
                 Dispose();
+
                 await _sideband.DisposeAsync().ConfigureAwait(false);
 
                 // A receive left behind by an end ends with the socket; nothing reads its result.
@@ -202,6 +211,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         internal async Task EndAsync(ConversationEndReason reason, string cause, CancellationToken cancellationToken)
         {
             _end.Now(reason, cause);
+
             if (Volatile.Read(ref _looping) == 1)
             {
                 try
@@ -228,6 +238,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
                     }
 
                     await _hearing.HearAsync(delta).ConfigureAwait(false);
+
                     return false;
 
                 case LiveEvent.Delegation delegation:
@@ -241,22 +252,54 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 
                     return false;
 
+                case LiveEvent.Started when !_started:
+                    _started = true;
+
+                    await OpenAsync(cancellationToken).ConfigureAwait(false);
+
+                    return false;
+
                 case LiveEvent.Appended { EventId: { } eventId }:
                     _end.Acked(eventId);
+
                     return false;
 
                 case LiveEvent.Closed end:
                     await _hearing.FlushAsync().ConfigureAwait(false);
+
                     await _finish.FinishAsync(ConversationEndReason.CallerHungUp, end.Reason ?? SidebandClosedCause).ConfigureAwait(false);
+
                     return true;
 
                 case LiveEvent.Failed failed:
-                    OpenAiLiveLog.LiveError(_logger, CallId, failed.Code ?? "unknown", failed.Message ?? string.Empty);
+                    OpenAiLiveLog.LiveError(Logger, CallId, failed.Code ?? "unknown", failed.Message ?? string.Empty);
+
                     return false;
 
                 default:
                     return false;
             }
+        }
+
+        private async ValueTask OpenAsync(CancellationToken cancellationToken)
+        {
+            // GPT-Live knows no date of its own: on a real call it named the wrong weekday.
+            if (_call.Session.Runner.ClockLine() is { } clock)
+            {
+                await SendAsync(OpenAiLiveWire.SessionFact(NextEventId(), clock), cancellationToken).ConfigureAwait(false);
+            }
+
+            await _channel.OpenAsync(TellAsync, cancellationToken).ConfigureAwait(false);
+
+            if (_greeting is not null)
+            {
+                await SendAsync(OpenAiLiveWire.GreetFirst(NextEventId(), _greeting), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private ValueTask TellAsync(string context, CancellationToken cancellationToken)
+        {
+            return SendAsync(OpenAiLiveEvents.SessionThinking(context, NextEventId()), cancellationToken);
         }
 
         // An end from outside every delegation (an operator's, the host's) has no answer of its own to hang up after.
@@ -265,7 +308,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         private async Task HangUpAfterAnyEngineEndAsync()
         {
             await _call.Session.Lifetime.Ending.WhenRequested.ConfigureAwait(false);
+
             await _answers.WhenAnsweredAsync().ConfigureAwait(false);
+
             _end.WhenQuiet();
         }
 
@@ -274,15 +319,18 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         private async Task TransferAfterAnswersAsync()
         {
             await _answers.WhenAnsweredAsync().ConfigureAwait(false);
+
             _end.WhenQuiet();
         }
 
         // A message that arrived together with the end is still part of the call: its words are heard. A delegation in
         // it is not answered, and the ledger flush after this closes the line it would have closed.
-        private ValueTask HearReceivedAsync(Task<string?>? receiving) =>
-            receiving is { IsCompletedSuccessfully: true, Result: { } json } && LiveEventReader.Read(json) is LiveEvent.Transcript delta
+        private ValueTask HearReceivedAsync(Task<string?>? receiving)
+        {
+            return receiving is { IsCompletedSuccessfully: true, Result: { } json } && LiveEventReader.Read(json) is LiveEvent.Transcript delta
                 ? _hearing.HearAsync(delta)
                 : ValueTask.CompletedTask;
+        }
 
         private async ValueTask SendAsync(JsonObject liveEvent, CancellationToken cancellationToken)
         {
@@ -302,25 +350,29 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         }
 
         private async Task<(Task<string?>? Receiving, bool GoesOn)> TransferAsync(
-            LiveTransfer transfer, Uri target, Task<string?>? receiving, CancellationToken cancellationToken)
+            LiveTransfer transfer, TransferCommand pending, Task<string?>? receiving, CancellationToken cancellationToken)
         {
-            OpenAiLiveLog.Transferring(_logger, CallId);
+            OpenAiLiveLog.Transferring(Logger, CallId);
+
             LiveHandover handover = await transfer.Line
-                .HandOverAsync(target, new LivePeerClose(_sideband, _hearing, _call.Host.Time), receiving, cancellationToken).ConfigureAwait(false);
+                .HandOverAsync(pending, new LivePeerClose(_sideband, _hearing, _call.Host.Time), receiving, cancellationToken).ConfigureAwait(false);
 
             switch (handover.Outcome)
             {
                 case LiveHandoverOutcome.Taken:
                     await _finish.HangUpAndFinishAsync(ConversationEndReason.TransferredToHuman, TransferredCause, cancellationToken).ConfigureAwait(false);
+
                     return (handover.Receiving, false);
 
                 case LiveHandoverOutcome.TakenAndClosed:
                     await _finish.FinishAsync(ConversationEndReason.TransferredToHuman, TransferredCause).ConfigureAwait(false);
+
                     return (null, false);
 
                 case LiveHandoverOutcome.NotTaken:
                 default:
                     bool goesOn = await FailedTransferAsync(transfer, handover.Why ?? "the line did not take the call", cancellationToken).ConfigureAwait(false);
+
                     return (handover.Receiving, goesOn);
             }
         }
@@ -331,15 +383,21 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         {
             if (transfer.IfFailed is not { } words || _call.HasEnded)
             {
-                OpenAiLiveLog.TransferFailed(_logger, CallId, why);
+                OpenAiLiveLog.TransferFailed(Logger, CallId, why);
+
                 await _finish.HangUpAndFinishAsync(ConversationEndReason.Faulted, TransferFailedCause, cancellationToken).ConfigureAwait(false);
+
                 return false;
             }
 
-            OpenAiLiveLog.TransferFailedGoingOn(_logger, CallId, why);
+            OpenAiLiveLog.TransferFailedGoingOn(Logger, CallId, why);
+
             transfer.Failed();
+
             _end.Rearm();
+
             await SendAsync(OpenAiLiveWire.SayNow(NextEventId(), words), cancellationToken).ConfigureAwait(false);
+
             if (_call.EngineEnded)
             {
                 _end.WhenQuiet();
@@ -348,6 +406,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
             return true;
         }
 
-        private string NextEventId() => "ac" + Interlocked.Increment(ref _eventIds).ToString(CultureInfo.InvariantCulture);
+        private string NextEventId()
+        {
+            return "ac" + Interlocked.Increment(ref _eventIds).ToString(CultureInfo.InvariantCulture);
+        }
     }
 }

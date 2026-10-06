@@ -1,4 +1,4 @@
-using AgentCore.Application.Conversation.Actions;
+using AgentCore.Application.Conversation.Commands;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Runtime.Session;
 using AgentCore.Application.Tests.Fakes;
@@ -10,34 +10,34 @@ using Xunit;
 
 namespace AgentCore.Application.Tests.Conversation
 {
-    public sealed class ConversationActionsTests
+    public sealed class ChannelCommandsTests
     {
         private static readonly Uri Staff = new("tel:+15550002222");
 
         [Fact]
-        public async Task AnEndActionEndsTheConversationWithItsReason()
+        public async Task AnEndCommandEndsTheConversationWithItsReason()
         {
             RecordingHook hook = new();
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, reply, [hook]);
 
-            Assert.Equal(ConversationActionResult.Scheduled, session.Request(new EndConversationAction(ConversationEndReason.TransferredToHuman)));
+            Assert.Equal(ChannelCommandResult.Scheduled, session.Send(new EndCommand(ConversationEndReason.TransferredToHuman)));
             await session.FlushNoticesAsync();
 
             Assert.Equal(ConversationEndReason.TransferredToHuman, Assert.Single(hook.Of<ConversationEnded>()).Reason);
         }
 
         [Fact]
-        public void AnEndingConversationTakesNoActionAndNeverAsksTheChannel()
+        public void AnEndingConversationTakesNoCommandAndNeverAsksTheChannel()
         {
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, reply);
-            RecordingChannel channel = new(ConversationActionResult.Scheduled);
-            session.Actions.Attach(channel);
+            RecordingChannel channel = new(ChannelCommandResult.Scheduled);
+            session.Commands.Attach(channel);
             _ = session.EndConversation(ConversationEndReason.CallerHungUp);
 
-            Assert.Equal(ConversationActionResult.Ending, session.Request(new EndConversationAction(ConversationEndReason.AgentCompleted)));
-            Assert.Equal(ConversationActionResult.Ending, session.Request(new TransferAction(Staff)));
+            Assert.Equal(ChannelCommandResult.Ending, session.Send(new EndCommand(ConversationEndReason.AgentCompleted)));
+            Assert.Equal(ChannelCommandResult.Ending, session.Send(new TransferCommand(Staff)));
             Assert.Empty(channel.Seen);
         }
 
@@ -47,7 +47,7 @@ namespace AgentCore.Application.Tests.Conversation
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, reply);
 
-            Assert.Equal(ConversationActionResult.NotSupported, session.Request(new TransferAction(Staff)));
+            Assert.Equal(ChannelCommandResult.NotSupported, session.Send(new TransferCommand(Staff)));
             Assert.False(session.IsComplete);
         }
 
@@ -56,26 +56,26 @@ namespace AgentCore.Application.Tests.Conversation
         {
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, reply);
-            RecordingChannel channel = new(ConversationActionResult.Scheduled);
-            TransferAction transfer = new(Staff);
+            RecordingChannel channel = new(ChannelCommandResult.Scheduled);
+            TransferCommand transfer = new(Staff);
 
-            session.Actions.Attach(channel);
-            Assert.Equal(ConversationActionResult.Scheduled, session.Request(transfer));
+            session.Commands.Attach(channel);
+            Assert.Equal(ChannelCommandResult.Scheduled, session.Send(transfer));
             Assert.Same(transfer, Assert.Single(channel.Seen));
         }
 
-        // A newer call that takes the conversation over carries its actions from then on.
+        // A newer call that takes the conversation over carries its commands from then on.
         [Fact]
         public void ANewerChannelReplacesTheOlderOne()
         {
             using ScriptedChatClient reply = new("hello");
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, reply);
-            RecordingChannel older = new(ConversationActionResult.Scheduled);
-            RecordingChannel newer = new(ConversationActionResult.Scheduled);
-            session.Actions.Attach(older);
-            session.Actions.Attach(newer);
+            RecordingChannel older = new(ChannelCommandResult.Scheduled);
+            RecordingChannel newer = new(ChannelCommandResult.Scheduled);
+            session.Commands.Attach(older);
+            session.Commands.Attach(newer);
 
-            Assert.Equal(ConversationActionResult.Scheduled, session.Request(new TransferAction(Staff)));
+            Assert.Equal(ChannelCommandResult.Scheduled, session.Send(new TransferCommand(Staff)));
             Assert.Single(newer.Seen);
             Assert.Empty(older.Seen);
         }
@@ -85,7 +85,7 @@ namespace AgentCore.Application.Tests.Conversation
         {
             ToolCallScope scope = new("c-1", 0, string.Empty);
 
-            Assert.Equal(ConversationActionResult.NotSupported, scope.Conversation.Request(new EndConversationAction(ConversationEndReason.AgentCompleted)));
+            Assert.Equal(ChannelCommandResult.NotSupported, scope.Channel.Send(new EndCommand(ConversationEndReason.AgentCompleted)));
         }
 
         [Theory]
@@ -94,7 +94,7 @@ namespace AgentCore.Application.Tests.Conversation
         [InlineData("sips:agent@example.com")]
         public void ATransferTakesTelSipAndSipsTargets(string target)
         {
-            Assert.Equal(new Uri(target), new TransferAction(new Uri(target)).Target);
+            Assert.Equal(new Uri(target), new TransferCommand(new Uri(target)).Target);
         }
 
         [Theory]
@@ -102,16 +102,23 @@ namespace AgentCore.Application.Tests.Conversation
         [InlineData("mailto:staff@example.com")]
         public void ATransferRefusesAnyOtherTarget(string target)
         {
-            _ = Assert.Throws<ArgumentException>(() => new TransferAction(new Uri(target)));
+            _ = Assert.Throws<ArgumentException>(() => new TransferCommand(new Uri(target)));
         }
 
-        private sealed class RecordingChannel(ConversationActionResult answer) : IConversationChannel
+        // GPT-Live takes at most 500 tokens in one update.
+        [Fact]
+        public void AVoiceFactIsCutToItsFirstThousandCharacters()
         {
-            public List<ConversationAction> Seen { get; } = [];
+            Assert.Equal(new string('a', 1000), new AddVoiceContextCommand(new string('a', 1000) + "b").Text);
+        }
 
-            public ConversationActionResult Request(ConversationAction action)
+        private sealed class RecordingChannel(ChannelCommandResult answer) : IConversationChannel
+        {
+            public List<ChannelCommand> Seen { get; } = [];
+
+            public ChannelCommandResult Send(ChannelCommand command)
             {
-                Seen.Add(action);
+                Seen.Add(command);
                 return answer;
             }
         }
