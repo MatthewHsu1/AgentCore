@@ -38,7 +38,7 @@ namespace AgentCore.Application.Configuration.Compilation
                 StageConfiguration stage = policy.Stages[index];
                 string stagePointer = ConfigurationError.AppendPointer(
                     ConfigurationError.AppendPointer(policyPointer, "stages"), index);
-                    
+
                 if (stage.Agent is not { } agentId)
                 {
                     stages[stage.Id] = NoAgentId;

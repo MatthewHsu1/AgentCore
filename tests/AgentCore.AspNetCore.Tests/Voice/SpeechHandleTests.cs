@@ -254,7 +254,10 @@ namespace AgentCore.AspNetCore.Tests.Voice
         {
             SpeechHandle handle = SpeechHandle.Create(_time, NullLogger.Instance);
             int runs = 0;
-            Action<SpeechHandle> counted = _ => Interlocked.Increment(ref runs);
+            void counted(SpeechHandle done)
+            {
+                _ = Interlocked.Increment(ref runs);
+            }
             TaskCompletionSource lastRan = new(TaskCreationOptions.RunContinuationsAsynchronously);
             handle.AddDoneCallback(counted);
             handle.AddDoneCallback(counted);

@@ -1,5 +1,3 @@
-using System.Text.Json.Nodes;
-using AgentCore.Application.Blobs;
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
@@ -166,7 +164,10 @@ namespace AgentCore.Application.Tests.Hooks
         {
             public string Name => "throwing";
 
-            public string? Format(KnowledgeCard card) => throw new InvalidOperationException("no label");
+            public string? Format(KnowledgeCard card)
+            {
+                throw new InvalidOperationException("no label");
+            }
         }
     }
 }

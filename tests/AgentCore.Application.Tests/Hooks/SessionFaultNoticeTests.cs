@@ -44,7 +44,7 @@ namespace AgentCore.Application.Tests.Hooks
             await session.FlushNoticesAsync();
 
             Fault fault = Assert.Single(hook.Of<Fault>());
-            Assert.Equal((FaultKind.StateRestorePartial, (int?)null), (fault.Kind, fault.Scope.TurnIndex));
+            Assert.Equal((FaultKind.StateRestorePartial, null), (fault.Kind, fault.Scope.TurnIndex));
             Assert.Equal("the document no longer declares the slot 'retired'.", fault.Message);
         }
 
@@ -66,7 +66,7 @@ namespace AgentCore.Application.Tests.Hooks
             await session.FlushNoticesAsync();
 
             Fault fault = Assert.Single(hook.Of<Fault>());
-            Assert.Equal((FaultKind.ExtractionFailed, (int?)0), (fault.Kind, fault.Scope.TurnIndex));
+            Assert.Equal((FaultKind.ExtractionFailed, 0), (fault.Kind, fault.Scope.TurnIndex));
             Assert.StartsWith("the extractor reply is not well-formed JSON", fault.Message, StringComparison.Ordinal);
         }
 
@@ -83,7 +83,7 @@ namespace AgentCore.Application.Tests.Hooks
 
             Assert.Equal("hello", turn.ReplyText);
             Fault fault = Assert.Single(hook.Of<Fault>());
-            Assert.Equal((FaultKind.BusyMarkFailed, (int?)null), (fault.Kind, fault.Scope.TurnIndex));
+            Assert.Equal((FaultKind.BusyMarkFailed, null), (fault.Kind, fault.Scope.TurnIndex));
             Assert.Equal("IOException: the store is down", fault.Message);
             _ = Assert.IsType<IOException>(fault.Cause);
         }
@@ -93,7 +93,7 @@ namespace AgentCore.Application.Tests.Hooks
         {
             Fault fault = await RenewAsync(() => false);
 
-            Assert.Equal((FaultKind.BusyMarkLost, (int?)null), (fault.Kind, fault.Scope.TurnIndex));
+            Assert.Equal((FaultKind.BusyMarkLost, null), (fault.Kind, fault.Scope.TurnIndex));
             Assert.Null(fault.Cause);
         }
 
@@ -102,7 +102,7 @@ namespace AgentCore.Application.Tests.Hooks
         {
             Fault fault = await RenewAsync(() => throw new IOException("the store is down"));
 
-            Assert.Equal((FaultKind.BusyMarkFailed, (int?)null), (fault.Kind, fault.Scope.TurnIndex));
+            Assert.Equal((FaultKind.BusyMarkFailed, null), (fault.Kind, fault.Scope.TurnIndex));
             _ = Assert.IsType<IOException>(fault.Cause);
         }
 

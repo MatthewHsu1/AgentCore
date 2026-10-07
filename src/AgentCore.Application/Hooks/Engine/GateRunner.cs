@@ -11,7 +11,10 @@ namespace AgentCore.Application.Hooks.Engine
     {
         internal HookTable Table => table;
 
-        internal bool Overrides(GatePoint point) => table.Overrides(point);
+        internal bool Overrides(GatePoint point)
+        {
+            return table.Overrides(point);
+        }
 
         /// <summary>Runs the chain and returns the value the hooks left.</summary>
         /// <typeparam name="TGate">The gate's view type.</typeparam>
@@ -89,8 +92,10 @@ namespace AgentCore.Application.Hooks.Engine
         }
 
         // A hook's own TimeoutException faulted its task; the wait's own timeout is a fresh exception.
-        private static bool ThrownBy(Task running, Exception exception) =>
-            running.Exception?.InnerExceptions.Contains(exception) == true;
+        private static bool ThrownBy(Task running, Exception exception)
+        {
+            return running.Exception?.InnerExceptions.Contains(exception) == true;
+        }
 
         // Disposing a source unhooks it from the turn token and stops its timer, so a hook still running would
         // never see its token cancelled. The sources live until the hook ends, however long that is.

@@ -240,13 +240,20 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class ClosedModelHook(bool before) : AgentHook
         {
-            public override HookFailure FailureFor(GatePoint point) => HookFailure.Closed;
+            public override HookFailure FailureFor(GatePoint point)
+            {
+                return HookFailure.Closed;
+            }
 
-            public override ValueTask BeforeModelAsync(ModelGate gate, CancellationToken cancellationToken) =>
-                before ? throw new InvalidOperationException("boom") : default;
+            public override ValueTask BeforeModelAsync(ModelGate gate, CancellationToken cancellationToken)
+            {
+                return before ? throw new InvalidOperationException("boom") : default;
+            }
 
-            public override ValueTask AfterModelAsync(ModelResultGate gate, CancellationToken cancellationToken) =>
-                before ? default : throw new InvalidOperationException("boom");
+            public override ValueTask AfterModelAsync(ModelResultGate gate, CancellationToken cancellationToken)
+            {
+                return before ? default : throw new InvalidOperationException("boom");
+            }
         }
 
         internal sealed class BeforeOnly(Action<ModelGate> before) : AgentHook

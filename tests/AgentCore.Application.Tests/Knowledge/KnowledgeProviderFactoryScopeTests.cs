@@ -2,7 +2,6 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Tests.Knowledge.Fakes;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
-using Microsoft.Extensions.AI;
 using Xunit;
 using static AgentCore.Application.Tests.Knowledge.KnowledgeProviderFactoryTestSupport;
 

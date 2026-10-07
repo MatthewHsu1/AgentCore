@@ -2,7 +2,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.Tests.Fakes;
-using Microsoft.Extensions.AI;
 using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay

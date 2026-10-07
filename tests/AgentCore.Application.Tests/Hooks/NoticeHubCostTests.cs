@@ -41,7 +41,10 @@ namespace AgentCore.Application.Tests.Hooks
         {
             public override TimeSpan? NoticeTimeout => null;
 
-            public override ValueTask OnTurnStartedAsync(TurnStarted notice, CancellationToken cancellationToken) => ValueTask.CompletedTask;
+            public override ValueTask OnTurnStartedAsync(TurnStarted notice, CancellationToken cancellationToken)
+            {
+                return ValueTask.CompletedTask;
+            }
         }
     }
 

@@ -21,7 +21,7 @@ namespace AgentCore.Application.Runtime.Session
         public ChannelCommandResult Send(ChannelCommand command)
         {
             ArgumentNullException.ThrowIfNull(command);
-            
+
             if (session.IsComplete || session.Lifetime.Ending.Requested)
             {
                 return ChannelCommandResult.Ending;

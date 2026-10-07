@@ -177,7 +177,7 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
             StubHttpMessageHandler endpoint = StubHttpMessageHandler.Answering(HttpStatusCode.OK, Answer);
             IChatClient client = await BuildClientAsync(new StubHandlerFactory(endpoint));
 
-            await Assert.ThrowsAsync<InvalidOperationException>(
+            _ = await Assert.ThrowsAsync<InvalidOperationException>(
                 async () => await client.GetResponseAsync("hi", options: null, Token));
 
             Assert.Empty(endpoint.Requests);

@@ -2032,15 +2032,6 @@ static AgentCore.Application.Blobs.BlobLink.Lifetime.get -> System.TimeSpan
 static AgentCore.Application.Blobs.BlobLink.DispositionOf(string! mediaType, string! name) -> string!
 AgentCore.Application.Ports.IBlobStore.LinkAsync(AgentCore.Application.Blobs.BlobRef! blob, System.TimeSpan lifetime, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Uri?>
 AgentCore.Application.Ports.IBlobStore.StatAsync(string! ownerId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Blobs.BlobRef?>
-AgentCore.Application.Blobs.FileLink
-AgentCore.Application.Blobs.FileLink.<Clone>$() -> AgentCore.Application.Blobs.FileLink!
-AgentCore.Application.Blobs.FileLink.Blob.get -> AgentCore.Application.Blobs.BlobRef!
-AgentCore.Application.Blobs.FileLink.Blob.init -> void
-AgentCore.Application.Blobs.FileLink.Deconstruct(out AgentCore.Application.Blobs.BlobRef! Blob, out System.Uri? Url) -> void
-AgentCore.Application.Blobs.FileLink.Equals(AgentCore.Application.Blobs.FileLink? other) -> bool
-AgentCore.Application.Blobs.FileLink.FileLink(AgentCore.Application.Blobs.BlobRef! Blob, System.Uri? Url) -> void
-AgentCore.Application.Blobs.FileLink.Url.get -> System.Uri?
-AgentCore.Application.Blobs.FileLink.Url.init -> void
 AgentCore.Application.Conversation.Conversations
 AgentCore.Application.Conversation.Conversations.AppendAsync(string! conversationId, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessageDraft!>! messages, AgentCore.Application.Conversation.ConversationSessionState? state = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>!>
 AgentCore.Application.Conversation.Conversations.SaveStateAsync(string! conversationId, AgentCore.Application.Conversation.ConversationSessionState! state, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -2054,7 +2045,6 @@ AgentCore.Application.Conversation.Conversations.DetachPrincipalAsync(string! co
 AgentCore.Application.Conversation.Conversations.EraseAsync(string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
 AgentCore.Application.Conversation.Conversations.GetAsync(string! conversationId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Conversation.ConversationRecord?>
 AgentCore.Application.Conversation.Conversations.FindContinuationAsync(string! responseId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<string?>
-AgentCore.Application.Conversation.Conversations.LinkFilesAsync(string! conversationId, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.Task<System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.FileLink!>!>!
 AgentCore.Application.Conversation.Conversations.ListAsync(string! principalKey, string? after, int limit, AgentCore.Application.Conversation.ConversationStatus? status = null, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Conversation.ConversationPage!>
 AgentCore.Application.Conversation.Conversations.RenameAsync(string! conversationId, string! title, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.Conversations.RewriteAsync(string! conversationId, string! messageId, Microsoft.Extensions.AI.ChatMessage! content, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -2063,11 +2053,6 @@ AgentCore.Application.Conversation.Conversations.SetCustomAsync(string! conversa
 AgentCore.Application.Conversation.Conversations.SetExternalIdAsync(string! conversationId, string? externalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.Conversations.SetStatusAsync(string! conversationId, AgentCore.Application.Conversation.ConversationStatus status, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.Conversations.SweepAsync(System.TimeSpan retention, int batchSize = 500, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<int>
-override AgentCore.Application.Blobs.FileLink.Equals(object? obj) -> bool
-override AgentCore.Application.Blobs.FileLink.GetHashCode() -> int
-override AgentCore.Application.Blobs.FileLink.ToString() -> string!
-static AgentCore.Application.Blobs.FileLink.operator ==(AgentCore.Application.Blobs.FileLink? left, AgentCore.Application.Blobs.FileLink? right) -> bool
-static AgentCore.Application.Blobs.FileLink.operator !=(AgentCore.Application.Blobs.FileLink? left, AgentCore.Application.Blobs.FileLink? right) -> bool
 AgentCore.Application.Conversation.Conversations.Store.get -> AgentCore.Application.Ports.IConversationStore!
 AgentCore.Application.Transcript.FileContent
 AgentCore.Application.Transcript.FileContent.FileId.get -> string!
@@ -2118,11 +2103,9 @@ AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Hooks.in
 AgentCore.Application.Conversation.StoredConversation
 AgentCore.Application.Conversation.StoredConversation.Conversation.get -> AgentCore.Application.Conversation.ConversationRecord!
 AgentCore.Application.Conversation.StoredConversation.Conversation.init -> void
-AgentCore.Application.Conversation.StoredConversation.Files.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.FileLink!>!
 AgentCore.Application.Conversation.StoredConversation.Files.init -> void
 AgentCore.Application.Conversation.StoredConversation.Messages.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>!
 AgentCore.Application.Conversation.StoredConversation.Messages.init -> void
-AgentCore.Application.Conversation.StoredConversation.StoredConversation(AgentCore.Application.Conversation.ConversationRecord! Conversation, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>! Messages, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.FileLink!>! Files) -> void
 AgentCore.Application.Ports.IConversations
 AgentCore.Application.Ports.IConversations.AppendMessageAsync(string! conversationId, Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<AgentCore.Application.Transcript.ConversationMessage!>
 AgentCore.Application.Ports.IConversations.AttachPrincipalAsync(string! conversationId, string! principalKey, string! role, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
@@ -2137,7 +2120,6 @@ AgentCore.Application.Ports.IConversations.SetCustomAsync(string! conversationId
 AgentCore.Application.Ports.IConversations.SetExternalIdAsync(string! conversationId, string? externalId, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Ports.IConversations.SetStatusAsync(string! conversationId, AgentCore.Application.Conversation.ConversationStatus status, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask
 AgentCore.Application.Conversation.StoredConversation.<Clone>$() -> AgentCore.Application.Conversation.StoredConversation!
-AgentCore.Application.Conversation.StoredConversation.Deconstruct(out AgentCore.Application.Conversation.ConversationRecord! Conversation, out System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>! Messages, out System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.FileLink!>! Files) -> void
 AgentCore.Application.Conversation.StoredConversation.Equals(AgentCore.Application.Conversation.StoredConversation? other) -> bool
 override AgentCore.Application.Conversation.StoredConversation.Equals(object? obj) -> bool
 override AgentCore.Application.Conversation.StoredConversation.GetHashCode() -> int
@@ -3192,3 +3174,10 @@ static AgentCore.Application.Conversation.Commands.TransferCommand.operator !=(A
 virtual AgentCore.Application.Conversation.Commands.ChannelCommand.EqualityContract.get -> System.Type!
 virtual AgentCore.Application.Conversation.Commands.ChannelCommand.Equals(AgentCore.Application.Conversation.Commands.ChannelCommand? other) -> bool
 virtual AgentCore.Application.Conversation.Commands.ChannelCommand.PrintMembers(System.Text.StringBuilder! builder) -> bool
+AgentCore.Application.Conversation.Conversations.LinkFileAsync(string! conversationId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Uri?>
+AgentCore.Application.Conversation.StoredConversation.Deconstruct(out AgentCore.Application.Conversation.ConversationRecord! Conversation, out System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>! Messages, out System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.BlobRef!>! Files) -> void
+AgentCore.Application.Conversation.StoredConversation.Files.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.BlobRef!>!
+AgentCore.Application.Conversation.StoredConversation.StoredConversation(AgentCore.Application.Conversation.ConversationRecord! Conversation, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Transcript.ConversationMessage!>! Messages, System.Collections.Generic.IReadOnlyList<AgentCore.Application.Blobs.BlobRef!>! Files) -> void
+AgentCore.Application.Ports.IConversations.LinkFileAsync(string! conversationId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Uri?>
+AgentCore.Application.Blobs.BlobOwner
+static AgentCore.Application.Blobs.BlobOwner.IsSafe(string? ownerId) -> bool

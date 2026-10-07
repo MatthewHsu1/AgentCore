@@ -28,7 +28,7 @@ namespace AgentCore.AspNetCore.Voice.Threading
         {
             lock (_gate)
             {
-                _source.TrySetResult();
+                _ = _source.TrySetResult();
             }
         }
 

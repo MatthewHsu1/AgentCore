@@ -110,10 +110,14 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             await running.Loop;
         }
 
-        private static string Heard(string type, string delta, int start, int end) =>
-            new JsonObject { ["type"] = type, ["delta"] = delta, ["start_ms"] = start, ["end_ms"] = end }.ToJsonString();
+        private static string Heard(string type, string delta, int start, int end)
+        {
+            return new JsonObject { ["type"] = type, ["delta"] = delta, ["start_ms"] = start, ["end_ms"] = end }.ToJsonString();
+        }
 
-        private static List<(string Role, string? Author, string Text)> Spoken(IEnumerable<ChatMessage> messages) =>
-            [.. messages.Where(message => message.Role != ChatRole.System).Select(message => (message.Role.Value, message.AuthorName, message.Text))];
+        private static List<(string Role, string? Author, string Text)> Spoken(IEnumerable<ChatMessage> messages)
+        {
+            return [.. messages.Where(message => message.Role != ChatRole.System).Select(message => (message.Role.Value, message.AuthorName, message.Text))];
+        }
     }
 }

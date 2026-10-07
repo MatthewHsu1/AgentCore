@@ -97,7 +97,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             Assert.Equal(1, second.TurnIndex);
             Assert.Equal(string.Empty, second.ReplyText);
-            Assert.NotNull(second.Cut);
+            _ = Assert.NotNull(second.Cut);
             Assert.Equal(["hi", "hello there.", "go on"], session.Transcript.Select(message => message.Text));
             Assert.Equal(2, session.State.TurnIndex);
         }

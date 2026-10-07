@@ -80,7 +80,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         [InlineData("whsec_!!!")]
         public void ASecretThatHoldsNoUsableKeyFails(string secret)
         {
-            Assert.Throws<FormatException>(() => StandardWebhookSignature.KeyOf(secret));
+            _ = Assert.Throws<FormatException>(() => StandardWebhookSignature.KeyOf(secret));
         }
     }
 }

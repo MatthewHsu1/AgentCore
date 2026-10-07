@@ -59,7 +59,10 @@ namespace AgentCore.Application.Hooks.Layers
                     cancellationToken);
         }
 
-        private static ChatResponse Refusal(ModelRound round) => new(new ChatMessage(ChatRole.Assistant, round.RefusalReply));
+        private static ChatResponse Refusal(ModelRound round)
+        {
+            return new(new ChatMessage(ChatRole.Assistant, round.RefusalReply));
+        }
 
         /// <summary>What the model is asked after BeforeModel, or the answer a hook gave in its place.</summary>
         internal sealed record Asked(IReadOnlyList<ChatMessage> Messages, ChatOptions? Options, ChatResponse? Answer);

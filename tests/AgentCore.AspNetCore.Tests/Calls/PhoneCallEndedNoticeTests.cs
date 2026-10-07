@@ -88,7 +88,7 @@ namespace AgentCore.AspNetCore.Tests.Calls
             await call.CloseAsync();
             await session.FlushNoticesAsync();
 
-            Assert.Equal(("call-7", 4d, (string?)null, CallEndReason.Closed), Shape(Assert.Single(hook.Of<CallEnded>())));
+            Assert.Equal(("call-7", 4d, null, CallEndReason.Closed), Shape(Assert.Single(hook.Of<CallEnded>())));
             Assert.Empty(hook.Of<ConversationEnded>());
         }
 
@@ -126,7 +126,7 @@ namespace AgentCore.AspNetCore.Tests.Calls
             await newer.Session.FlushNoticesAsync();
 
             Assert.Equal(
-                [("call-7", 5d, (string?)null, CallEndReason.Replaced), ("call-7", 12d, "close_requested", CallEndReason.Ended)],
+                [("call-7", 5d, null, CallEndReason.Replaced), ("call-7", 12d, "close_requested", CallEndReason.Ended)],
                 hook.Of<CallEnded>().Select(Shape));
         }
 
@@ -156,10 +156,14 @@ namespace AgentCore.AspNetCore.Tests.Calls
             return call;
         }
 
-        private static (string CallId, double Seconds, string? Cause, CallEndReason Reason) Shape(CallEnded ended) =>
-            (ended.CallId, ended.Seconds, ended.Cause, ended.Reason);
+        private static (string CallId, double Seconds, string? Cause, CallEndReason Reason) Shape(CallEnded ended)
+        {
+            return (ended.CallId, ended.Seconds, ended.Cause, ended.Reason);
+        }
 
-        private static Type[] EndsInOrder(RecordingHook hook) =>
-            [.. hook.Notices.Where(notice => notice is ConversationEnded or CallEnded).Select(notice => notice.GetType())];
+        private static Type[] EndsInOrder(RecordingHook hook)
+        {
+            return [.. hook.Notices.Where(notice => notice is ConversationEnded or CallEnded).Select(notice => notice.GetType())];
+        }
     }
 }

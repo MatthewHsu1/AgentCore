@@ -1,5 +1,4 @@
 using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Schema;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.TestSupport;
 using Microsoft.Extensions.Logging;

@@ -215,7 +215,7 @@ namespace AgentCore.Application.Tests.Transcript
             await provider.DrainAsync(session);
 
             ConversationMessage only = Assert.Single(store.Rows);
-            Assert.Equal((only.MessageId, (string?)null), ids);
+            Assert.Equal((only.MessageId, null), ids);
         }
 
         private static async Task<AgentSession> OpenAsync(CompiledAgent compiled, AIAgent agent, RecordingConversationStore store)

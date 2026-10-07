@@ -28,7 +28,10 @@ namespace AgentCore.Application.Hooks.Engine
 
         internal int MailboxCount => _mailboxes.Count;
 
-        internal bool Wants(Type noticeType) => table.Wants(noticeType);
+        internal bool Wants(Type noticeType)
+        {
+            return table.Wants(noticeType);
+        }
 
         /// <summary>Stamps one notice and queues it for every hook that wants it.</summary>
         /// <param name="notice">The fact, with its scope's conversation, session and turn already set.</param>

@@ -78,8 +78,14 @@ namespace AgentCore.Application.Hooks.BuiltIn
             return ValueTask.CompletedTask;
         }
 
-        private static string IdOf(HookNotice notice) => notice.Scope.ConversationId ?? string.Empty;
+        private static string IdOf(HookNotice notice)
+        {
+            return notice.Scope.ConversationId ?? string.Empty;
+        }
 
-        private static int TurnOf(HookNotice notice) => notice.Scope.TurnIndex ?? NoTurn;
+        private static int TurnOf(HookNotice notice)
+        {
+            return notice.Scope.TurnIndex ?? NoTurn;
+        }
     }
 }

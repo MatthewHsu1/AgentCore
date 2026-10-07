@@ -43,7 +43,7 @@ namespace AgentCore.AspNetCore.Voice.Speech
             {
                 lock (_lock)
                 {
-                    return _currentSpeech;
+                    return _currentSpeech is { IsDone: false } current ? current : null;
                 }
             }
         }
@@ -128,6 +128,7 @@ namespace AgentCore.AspNetCore.Voice.Speech
                 CancellationToken.None,
                 TaskContinuationOptions.None,
                 TaskScheduler.Default);
+
             return task;
         }
 

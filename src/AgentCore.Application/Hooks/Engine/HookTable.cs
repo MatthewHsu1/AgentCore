@@ -66,7 +66,11 @@ namespace AgentCore.Application.Hooks.Engine
             HashSet<AgentHook> seen = new(ReferenceEqualityComparer.Instance);
             foreach (AgentHook hook in hooks)
             {
-                ArgumentNullException.ThrowIfNull(hook, nameof(hooks));
+                if (hook is null)
+                {
+                    throw new ArgumentNullException(nameof(hooks), "A hook in the list is null.");
+                }
+
                 if (seen.Add(hook))
                 {
                     distinct.Add(hook);
@@ -76,17 +80,30 @@ namespace AgentCore.Application.Hooks.Engine
             return new HookTable(distinct);
         }
 
-        internal AgentHook[] For(GatePoint point) => _gates[point];
+        internal AgentHook[] For(GatePoint point)
+        {
+            return _gates[point];
+        }
 
-        internal bool Overrides(GatePoint point) => _gates[point].Length > 0;
+        internal bool Overrides(GatePoint point)
+        {
+            return _gates[point].Length > 0;
+        }
 
-        internal IReadOnlySet<Type> NoticesOf(AgentHook hook) =>
-            _notices.TryGetValue(hook, out IReadOnlySet<Type>? types) ? types : NoNotices;
+        internal IReadOnlySet<Type> NoticesOf(AgentHook hook)
+        {
+            return _notices.TryGetValue(hook, out IReadOnlySet<Type>? types) ? types : NoNotices;
+        }
 
-        internal bool Wants(Type noticeType) => _wanted.Contains(noticeType);
+        internal bool Wants(Type noticeType)
+        {
+            return _wanted.Contains(noticeType);
+        }
 
-        internal bool OverridesAnyGate(AgentHook hook) =>
-            GatePoint.All.Any(point => Array.Exists(_gates[point], listed => ReferenceEquals(listed, hook)));
+        internal bool OverridesAnyGate(AgentHook hook)
+        {
+            return GatePoint.All.Any(point => Array.Exists(_gates[point], listed => ReferenceEquals(listed, hook)));
+        }
 
         /// <summary>Whether a hook type overrides one gate, read from the type alone.</summary>
         /// <param name="hookType">The hook's type.</param>
@@ -97,7 +114,10 @@ namespace AgentCore.Application.Hooks.Engine
             return TypeOverrides(hookType, typeof(AgentHook).GetMethod(point.MethodName)!);
         }
 
-        private static bool Overrides(AgentHook hook, MethodInfo baseMethod) => TypeOverrides(hook.GetType(), baseMethod);
+        private static bool Overrides(AgentHook hook, MethodInfo baseMethod)
+        {
+            return TypeOverrides(hook.GetType(), baseMethod);
+        }
 
         // GetBaseDefinition tells an override apart from a method hidden with `new`, which the base dispatch never calls.
         private static bool TypeOverrides(Type hookType, MethodInfo baseMethod)

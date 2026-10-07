@@ -18,7 +18,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             ["""{"type":"session.input_transcript.delta","delta":"hi","start_ms":1200.5,"end_ms":1800.0}"""] = new LiveEvent.Transcript(Speaker.Caller, "hi", 1200, 1800),
         };
 
-        public static TheoryData<string> UnusableFrames => new(Expected.Keys);
+        public static TheoryData<string> UnusableFrames => [.. Expected.Keys];
 
         [Fact]
         public void TheReaderNamesAnUnmodelledEventAndAnError()

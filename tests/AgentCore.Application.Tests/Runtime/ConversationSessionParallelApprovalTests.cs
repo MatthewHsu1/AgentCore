@@ -1,4 +1,3 @@
-using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.Gates;

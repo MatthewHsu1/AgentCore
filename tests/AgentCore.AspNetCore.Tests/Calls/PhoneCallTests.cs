@@ -68,7 +68,7 @@ namespace AgentCore.AspNetCore.Tests.Calls
 
             PhoneCallAdmission second = await PhoneCall.AdmitAsync(harness.Host, PhoneCallHarness.Offer("call-8"), Ct);
 
-            Assert.Equal(((PhoneCall?)null, (CallRefusal?)CallRefusal.Busy, true), (second.Call, second.Refusal, second.HeldByCall));
+            Assert.Equal((null, (CallRefusal?)CallRefusal.Busy, true), (second.Call, second.Refusal, second.HeldByCall));
             Assert.Same(first.Session, await harness.Sessions.TryGetAsync("main", "thread-1", Ct));
         }
 

@@ -112,7 +112,11 @@ namespace AgentCore.Application.Runtime.ToolCalls
             ArgumentNullException.ThrowIfNull(attachments);
             ArgumentNullException.ThrowIfNull(turn);
 
-            IReadOnlyList<ChatMessage> Pair() => PairOf(run.Call, result, attachments());
+            IReadOnlyList<ChatMessage> Pair()
+            {
+                return PairOf(run.Call, result, attachments());
+            }
+
             bool now;
             lock (_gate)
             {
@@ -203,11 +207,13 @@ namespace AgentCore.Application.Runtime.ToolCalls
             }
         }
 
-        private static IReadOnlyList<ChatMessage> PairOf(FunctionCallContent call, object? result, IEnumerable<AIContent> attachments) =>
-        [
+        private static IReadOnlyList<ChatMessage> PairOf(FunctionCallContent call, object? result, IEnumerable<AIContent> attachments)
+        {
+            return [
             new ChatMessage(ChatRole.Assistant, [new FunctionCallContent(call.CallId, call.Name, call.Arguments)]),
             new ChatMessage(ChatRole.Tool, [new FunctionResultContent(call.CallId, result), .. attachments]),
         ];
+        }
 
         private void CarriedOut()
         {

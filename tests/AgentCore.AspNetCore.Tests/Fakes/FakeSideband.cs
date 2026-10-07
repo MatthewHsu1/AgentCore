@@ -74,10 +74,16 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         }
 
         /// <summary>Closes the socket with no <c>session.closed</c>.</summary>
-        public void Complete() => _inbound.Writer.TryComplete();
+        public void Complete()
+        {
+            _ = _inbound.Writer.TryComplete();
+        }
 
         /// <summary>Breaks the socket: the next receive after the pushed events throws <paramref name="fault"/>.</summary>
-        public void Fail(Exception fault) => _inbound.Writer.TryComplete(fault);
+        public void Fail(Exception fault)
+        {
+            _ = _inbound.Writer.TryComplete(fault);
+        }
 
         public Task<JsonObject> WaitForSentAsync(Func<JsonObject, bool> match)
         {

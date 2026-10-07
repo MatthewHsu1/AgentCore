@@ -31,21 +31,33 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Wire
             }
         }
 
-        internal Task<bool> RejectAsync(string callId, CallRefusal refusal, CancellationToken cancellationToken) =>
-            SucceedsAsync(OpenAiLiveWire.RejectPath(callId), OpenAiLiveWire.RejectBody(refusal), cancellationToken);
+        internal Task<bool> RejectAsync(string callId, CallRefusal refusal, CancellationToken cancellationToken)
+        {
+            return SucceedsAsync(OpenAiLiveWire.RejectPath(callId), OpenAiLiveWire.RejectBody(refusal), cancellationToken);
+        }
 
-        internal Task<bool> HangupAsync(string callId, CancellationToken cancellationToken) =>
-            SucceedsAsync(OpenAiLiveWire.HangupPath(callId), [], cancellationToken);
+        internal Task<bool> HangupAsync(string callId, CancellationToken cancellationToken)
+        {
+            return SucceedsAsync(OpenAiLiveWire.HangupPath(callId), [], cancellationToken);
+        }
 
         // A 2xx says only that OpenAI relayed the REFER, not that the line took the call (probe T1).
-        internal Task<bool> ReferAsync(string callId, Uri target, CancellationToken cancellationToken) =>
-            SucceedsAsync(OpenAiLiveWire.ReferPath(callId), OpenAiLiveWire.ReferBody(target), cancellationToken);
+        internal Task<bool> ReferAsync(string callId, Uri target, CancellationToken cancellationToken)
+        {
+            return SucceedsAsync(OpenAiLiveWire.ReferPath(callId), OpenAiLiveWire.ReferBody(target), cancellationToken);
+        }
 
         /// <summary>Hangs up on its own <see cref="QuietDeadline"/>; a deadline or a cancel gives <see langword="false"/>, never an exception.</summary>
-        internal Task<bool> HangupQuietlyAsync(string callId) => QuietlyAsync(token => HangupAsync(callId, token));
+        internal Task<bool> HangupQuietlyAsync(string callId)
+        {
+            return QuietlyAsync(token => HangupAsync(callId, token));
+        }
 
         /// <summary>Rejects on its own <see cref="QuietDeadline"/>; a deadline or a cancel gives <see langword="false"/>, never an exception.</summary>
-        internal Task<bool> RejectQuietlyAsync(string callId, CallRefusal refusal) => QuietlyAsync(token => RejectAsync(callId, refusal, token));
+        internal Task<bool> RejectQuietlyAsync(string callId, CallRefusal refusal)
+        {
+            return QuietlyAsync(token => RejectAsync(callId, refusal, token));
+        }
 
         private static async Task<bool> QuietlyAsync(Func<CancellationToken, Task<bool>> send)
         {

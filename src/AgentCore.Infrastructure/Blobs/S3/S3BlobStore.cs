@@ -189,10 +189,8 @@ namespace AgentCore.Infrastructure.Blobs.S3
 
         private static string OwnerPrefix(string ownerId)
         {
-            ArgumentException.ThrowIfNullOrWhiteSpace(ownerId);
-
-            return ownerId.Contains('/', StringComparison.Ordinal)
-                ? throw new ArgumentException("An owner id may not hold a slash.", nameof(ownerId))
+            return !BlobOwner.IsSafe(ownerId)
+                ? throw new ArgumentException("An owner id must pass BlobOwner.IsSafe.", nameof(ownerId))
                 : ownerId + "/";
         }
     }

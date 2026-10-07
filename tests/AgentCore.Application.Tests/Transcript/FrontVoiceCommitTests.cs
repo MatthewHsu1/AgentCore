@@ -21,8 +21,6 @@ namespace AgentCore.Application.Tests.Transcript
             FrontVoice.Line("It's Wednesday."),
         ];
 
-        private static CancellationToken Ct => TestContext.Current.CancellationToken;
-
         [Fact]
         public async Task CommitTurn_WritesTheLinesSaidBeforeAheadOfTheUser_AndNamesTheUserRow()
         {
@@ -76,12 +74,14 @@ namespace AgentCore.Application.Tests.Transcript
                 store.Live(ConversationId).Select(row => row.Content.Text));
         }
 
-        private static TurnCommit EndTheCall() =>
-            new(new ChatMessage(ChatRole.User, "Okay, uh please end the call now"))
+        private static TurnCommit EndTheCall()
+        {
+            return new(new ChatMessage(ChatRole.User, "Okay, uh please end the call now"))
             {
                 Before = SaidBefore,
                 Seen = new AgentResponse(new ChatMessage(ChatRole.Assistant, "Today is Sunday. Goodbye!")),
                 UserMessageId = "d3",
             };
+        }
     }
 }

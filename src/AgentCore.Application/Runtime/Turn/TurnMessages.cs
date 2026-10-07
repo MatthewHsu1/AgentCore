@@ -88,7 +88,7 @@ namespace AgentCore.Application.Runtime.Turn
                 ];
 
                 if (!tools.Any(content => content is FunctionCallContent or FunctionResultContent or ToolApprovalRequestContent
-                    || content is TextContent { Text.Length: > 0 }))
+                    or TextContent { Text.Length: > 0 }))
                 {
                     // A message whose every call is still in flight, with no words beside them. It does not
                     // belong in the next turn.

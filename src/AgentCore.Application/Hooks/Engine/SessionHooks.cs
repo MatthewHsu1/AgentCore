@@ -49,16 +49,24 @@ namespace AgentCore.Application.Hooks.Engine
         /// </summary>
         internal ConcurrentDictionary<string, ApprovalDecision> ApprovalDecisions { get; } = new(StringComparer.Ordinal);
 
-        internal HookScope Scope(int? turnIndex, string? stage) =>
-            new(_conversationId, _entry, turnIndex, stage, SessionId, 0, _time.GetUtcNow());
+        internal HookScope Scope(int? turnIndex, string? stage)
+        {
+            return new(_conversationId, _entry, turnIndex, stage, SessionId, 0, _time.GetUtcNow());
+        }
 
         internal bool Wants<TNotice>()
-            where TNotice : HookNotice => _runtime.Notices.Wants(typeof(TNotice));
+            where TNotice : HookNotice
+        {
+            return _runtime.Notices.Wants(typeof(TNotice));
+        }
 
         /// <summary>Raises one notice of this session.</summary>
         /// <param name="notice">The fact.</param>
         /// <param name="occurredAt">When it happened, if it was read before the raise (a turn's end), or <see langword="null"/> for now.</param>
-        internal Guid Raise(HookNotice notice, DateTimeOffset? occurredAt = null) => _runtime.Notices.Raise(notice, _time, occurredAt: occurredAt);
+        internal Guid Raise(HookNotice notice, DateTimeOffset? occurredAt = null)
+        {
+            return _runtime.Notices.Raise(notice, _time, occurredAt: occurredAt);
+        }
 
         /// <summary>
         /// Raises <see cref="ConversationStarted"/>, once per session. The caller holds the session's turn lock, so the
@@ -112,7 +120,10 @@ namespace AgentCore.Application.Hooks.Engine
             return storeHeldConversation ? ConversationOrigin.Resumed : ConversationOrigin.New;
         }
 
-        internal Task FlushAsync() => _runtime.Notices.FlushAsync(_conversationId);
+        internal Task FlushAsync()
+        {
+            return _runtime.Notices.FlushAsync(_conversationId);
+        }
 
         /// <summary>Lets go of the mailbox pin, once. The session was disposed or unloaded.</summary>
         internal void Release()

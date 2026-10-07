@@ -9,7 +9,7 @@ using Xunit;
 
 namespace AgentCore.AspNetCore.Tests.Endpoints
 {
-    /// <summary>Which published files reach the browser as a part, and with what link.</summary>
+    /// <summary>Which published files reach the browser as a part, and with what facts.</summary>
     public sealed class TurnStreamFilesTests
     {
         private static ChatResponseUpdate UpdateWith(params AIContent[] contents)
@@ -24,53 +24,40 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         }
 
         [Fact]
-        public async Task ResolveAsync_NotedFileTheCaptureKept_YieldsOnePartWithTheLink()
+        public void Resolve_NotedFileTheCaptureKept_YieldsOnePartWithTheFacts()
         {
             // Arrange: the same content passes twice, as a re-yielded update would; a refused one passes too.
-            Conversations conversations = new(new InMemoryConversationStore(), new StubBlobStore());
+            StubBlobStore blobs = new();
+            Conversations conversations = new(new InMemoryConversationStore(), blobs);
             TurnStreamFiles files = new();
             FileContent chart = Kept("chart.png", "image/png", 48213);
+            chart.Title = "Chart";
             FileContent refused = new() { Name = "refused.png", FileId = "cfile_2" };
             files.Note(UpdateWith(new TextContent("see"), chart));
             files.Note(UpdateWith(chart));
             files.Note(UpdateWith(refused));
 
             // Act
-            List<TurnStreamPart> parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+            List<TurnStreamPart> parts = [.. files.Resolve(conversations, "conversation-1")];
 
-            // Assert: once, linked, and the refused file is not there.
+            // Assert: once, and the refused file is not there.
             TurnStreamPart part = Assert.Single(parts);
             Assert.Equal(TurnStreamPart.File, part.Member);
             FilePayload payload = Assert.IsType<FilePayload>(part.Payload);
             Assert.Equal("chart.png", payload.Name);
+            Assert.Equal("Chart", payload.Title);
             Assert.Equal("image/png", payload.MediaType);
             Assert.Equal(48213, payload.Length);
-            Assert.Equal("https://blobs.test/conversation-1/chart.png?ttl=900", payload.Url);
         }
 
         [Fact]
-        public async Task ResolveAsync_StoreWithNoWebDoor_YieldsThePartWithoutAUrl()
-        {
-            // Arrange
-            Conversations conversations = new(new InMemoryConversationStore(), new StubBlobStore { Links = false });
-            TurnStreamFiles files = new();
-            files.Note(UpdateWith(Kept("rows.csv", "text/csv", 8)));
-
-            // Act
-            List<TurnStreamPart> parts = await files.ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
-
-            // Assert
-            Assert.Null(Assert.IsType<FilePayload>(Assert.Single(parts).Payload).Url);
-        }
-
-        [Fact]
-        public async Task ResolveAsync_NothingNoted_YieldsNothing()
+        public void Resolve_NothingNoted_YieldsNothing()
         {
             // Arrange
             Conversations conversations = new(new InMemoryConversationStore(), blobs: null);
 
             // Act
-            List<TurnStreamPart> parts = await new TurnStreamFiles().ResolveAsync(conversations, "conversation-1", TestContext.Current.CancellationToken).ToListAsync(TestContext.Current.CancellationToken);
+            List<TurnStreamPart> parts = [.. new TurnStreamFiles().Resolve(conversations, "conversation-1")];
 
             // Assert
             Assert.Empty(parts);
@@ -78,8 +65,6 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
 
         private sealed class StubBlobStore : IBlobStore
         {
-            public bool Links { get; init; } = true;
-
             public ValueTask<BlobRef> PutAsync(BlobWrite write, CancellationToken cancellationToken = default)
             {
                 throw new NotSupportedException();
@@ -92,12 +77,12 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
 
             public ValueTask<BlobRef?> StatAsync(string ownerId, string name, CancellationToken cancellationToken = default)
             {
-                throw new NotSupportedException("The read path links from the content and never asks the store.");
+                throw new NotSupportedException("Listing reads the content and never asks the store.");
             }
 
             public ValueTask<Uri?> LinkAsync(BlobRef blob, TimeSpan lifetime, CancellationToken cancellationToken = default)
             {
-                return ValueTask.FromResult(Links ? new Uri($"https://blobs.test/{blob.OwnerId}/{blob.Name}?ttl={(int)lifetime.TotalSeconds}") : null);
+                throw new NotSupportedException("Listing never signs a link.");
             }
 
             public ValueTask DeleteByOwnerAsync(string ownerId, CancellationToken cancellationToken = default)

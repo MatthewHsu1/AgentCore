@@ -14,7 +14,10 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
     {
         private const string Thread = "thread-9";
 
-        private static bool Hangup(RecordingLiveControl.Seen seen, string callId) => seen.Path == $"/v1/live/sessions/{callId}/hangup";
+        private static bool Hangup(RecordingLiveControl.Seen seen, string callId)
+        {
+            return seen.Path == $"/v1/live/sessions/{callId}/hangup";
+        }
 
         // The attach is the last step before the call runs.
         [Fact(Timeout = 30_000)]
@@ -34,7 +37,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Contains(host.Control.Requests, seen => Hangup(seen, "rtc_1"));
             Assert.Equal(("rtc_1", OpenAiLiveCall.AttachFailedCause), (ended.Call!.CallId, ended.Call.Cause));
             Assert.Equal(HttpStatusCode.OK, second.StatusCode);
-            Assert.Single(host.Attached);
+            _ = Assert.Single(host.Attached);
         }
 
         // StartAsync opens the store after the accept landed: a store that is down must not leave GPT-Live a call with no sideband.
@@ -57,7 +60,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Equal(HttpStatusCode.InternalServerError, first.StatusCode);
             Assert.Contains(host.Control.Requests, seen => Hangup(seen, "rtc_1"));
             Assert.Equal(HttpStatusCode.OK, second.StatusCode);
-            Assert.Single(host.Attached);
+            _ = Assert.Single(host.Attached);
         }
 
         // A webhook id counts as handled only after a 2xx; OpenAI redelivers a 500 under the same id.
@@ -78,7 +81,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
 
             Assert.Equal((HttpStatusCode.InternalServerError, HttpStatusCode.OK), (first.StatusCode, redelivered.StatusCode));
             Assert.Equal("rtc_1", started.CallId);
-            Assert.Single(host.Attached);
+            _ = Assert.Single(host.Attached);
         }
 
         // A host token that is already spent must not skip the end of a call or leave its loop reading.

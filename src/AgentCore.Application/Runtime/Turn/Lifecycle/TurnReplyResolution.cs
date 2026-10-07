@@ -1,6 +1,4 @@
 using System.Text.Json;
-using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Domain;
 using Microsoft.Agents.AI;

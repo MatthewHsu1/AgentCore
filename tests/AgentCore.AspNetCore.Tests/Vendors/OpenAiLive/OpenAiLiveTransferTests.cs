@@ -113,7 +113,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             await running.Loop;
             _ = await hook.WaitForAsync<ConversationEnded>();
 
-            Assert.Single(hook.Of<TurnStarted>());
+            _ = Assert.Single(hook.Of<TurnStarted>());
         }
 
         // A host that moves the call itself knows at once whether the line took it: nothing waits for the peer's close.
@@ -166,8 +166,9 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         }
 
         // Every tool of the harness's document asks for a transfer through the scope the binder fills, as a host's would.
-        private static Func<ToolConfiguration, AITool?> TransferTool(ConcurrentQueue<ChannelCommandResult> answers, string? ifFailed = null) =>
-            tool => AIFunctionFactory.Create(
+        private static Func<ToolConfiguration, AITool?> TransferTool(ConcurrentQueue<ChannelCommandResult> answers, string? ifFailed = null)
+        {
+            return tool => AIFunctionFactory.Create(
                 (ToolCallScope scope) =>
                 {
                     ChannelCommandResult answer = scope.Channel.Send(new TransferCommand(Staff) { IfFailed = ifFailed });
@@ -175,6 +176,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
                     return answer.ToString();
                 },
                 new AIFunctionFactoryOptions { Name = tool.Id, Description = tool.Description, ConfigureParameterBinding = ToolParameterBindings.For });
+        }
 
         private static async Task ReferAsync(RunningLiveCall running)
         {
@@ -185,15 +187,22 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             _ = await running.Referred.Task.WaitAsync(TimeSpan.FromSeconds(10), Ct);
         }
 
-        private static string[] Ask(string delegationId, string words, int startMs) =>
-        [
+        private static string[] Ask(string delegationId, string words, int startMs)
+        {
+            return [
             Heard(words, startMs),
             new JsonObject { ["type"] = OpenAiLiveEvents.DelegationCreated, ["delegation"] = new JsonObject { ["id"] = delegationId } }.ToJsonString(),
         ];
+        }
 
-        private static string Heard(string words, int startMs) =>
-            new JsonObject { ["type"] = OpenAiLiveEvents.InputTranscriptDelta, ["delta"] = " " + words, ["start_ms"] = startMs, ["end_ms"] = startMs + 1000 }.ToJsonString();
+        private static string Heard(string words, int startMs)
+        {
+            return new JsonObject { ["type"] = OpenAiLiveEvents.InputTranscriptDelta, ["delta"] = " " + words, ["start_ms"] = startMs, ["end_ms"] = startMs + 1000 }.ToJsonString();
+        }
 
-        private static string Closed() => new JsonObject { ["type"] = OpenAiLiveEvents.Closed, ["reason"] = "hangup" }.ToJsonString();
+        private static string Closed()
+        {
+            return new JsonObject { ["type"] = OpenAiLiveEvents.Closed, ["reason"] = "hangup" }.ToJsonString();
+        }
     }
 }

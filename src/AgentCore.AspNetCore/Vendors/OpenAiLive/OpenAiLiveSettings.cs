@@ -49,7 +49,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
             string? model = null;
             string? greeting = null;
             int? transferSeconds = null;
-            
+
             foreach (JsonProperty property in configuration.Live.EnumerateObject())
             {
                 switch (property.Name)

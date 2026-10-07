@@ -35,12 +35,15 @@ namespace AgentCore.Application.Tests.Runtime
 
         private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-        private static Dictionary<string, object?> StartArgs() => new(StringComparer.Ordinal)
+        private static Dictionary<string, object?> StartArgs()
         {
-            ["agentName"] = "blocker",
-            ["input"] = "work",
-            ["description"] = "d",
-        };
+            return new(StringComparer.Ordinal)
+            {
+                ["agentName"] = "blocker",
+                ["input"] = "work",
+                ["description"] = "d",
+            };
+        }
 
         [Fact]
         public async Task Delegation_ToAnAgentWithABackgroundChild_ReleasesItWhenTheToolReturns()

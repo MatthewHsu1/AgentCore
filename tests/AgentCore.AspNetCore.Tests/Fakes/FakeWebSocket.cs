@@ -1,15 +1,6 @@
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading.Channels;
-using AgentCore.Application.Configuration.Parsing;
-using AgentCore.AspNetCore.DependencyInjection;
-using AgentCore.AspNetCore.Vendors.TelnyxRelay;
-using AgentCore.TestSupport;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.AI;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 namespace AgentCore.AspNetCore.Tests.Fakes
 {

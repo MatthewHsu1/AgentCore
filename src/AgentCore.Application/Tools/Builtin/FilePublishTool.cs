@@ -16,7 +16,8 @@ namespace AgentCore.Application.Tools.Builtin
 {
     /// <summary>
     /// Copies one file out of the running conversation's workspace into the blob store, owned by the conversation, and
-    /// files a <see cref="FileContent"/> on the turn so the card reaches the person.
+    /// files a <see cref="FileContent"/> on the turn so the card reaches the person. The model gets a stable
+    /// <c>sandbox:/</c> name to link the file by.
     /// </summary>
     internal sealed class FilePublishTool
     {
@@ -104,7 +105,6 @@ namespace AgentCore.Application.Tools.Builtin
             }
 
             BlobRef blob;
-            Uri? url;
 
             try
             {
@@ -113,8 +113,6 @@ namespace AgentCore.Application.Tools.Builtin
                 blob = await _blobs
                     .PutAsync(new BlobWrite(conversationId, name, BlobMediaTypes.Of(name), content, length), cancellationToken)
                     .ConfigureAwait(false);
-
-                url = await _blobs.LinkAsync(blob, BlobLink.Lifetime, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -143,7 +141,7 @@ namespace AgentCore.Application.Tools.Builtin
                 ["name"] = blob.Name,
                 ["mediaType"] = blob.MediaType,
                 ["length"] = blob.Length,
-                ["url"] = url?.ToString(),
+                ["link"] = SandboxLink(blob.Name),
             };
         }
 
@@ -182,6 +180,12 @@ namespace AgentCore.Application.Tools.Builtin
             return full.StartsWith(rootWithSeparator, StringComparison.Ordinal) && full.Length > rootWithSeparator.Length
                 ? full
                 : null;
+        }
+
+        /// <summary>The stable name the model writes into its reply: <c>sandbox:/</c> and the stored name, escaped so markdown and a URL decoder read it back whole.</summary>
+        private static string SandboxLink(string name)
+        {
+            return "sandbox:/" + Uri.EscapeDataString(name);
         }
 
         private JsonObject Failed(string message)

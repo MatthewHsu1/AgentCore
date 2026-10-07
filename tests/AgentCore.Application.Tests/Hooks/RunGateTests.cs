@@ -114,7 +114,7 @@ namespace AgentCore.Application.Tests.Hooks
 
             _ = await session.RunTurnAsync("fix it", Ct);
 
-                        Assert.Equal(2, fired);
+            Assert.Equal(2, fired);
             Assert.All(model.Requests, request => Assert.Equal(1, request.Tools.Count(name => name == "extra_tool")));
         }
 
@@ -123,7 +123,7 @@ namespace AgentCore.Application.Tests.Hooks
         public async Task AHookThatThrowsAfterStagingAddsNothingAndTheNextHookStillDoes()
         {
             RequestsSeen model = new(new ScriptedChatClient("done"));
-            Gate failing = new(gate => StageAllThenThrow(gate));
+            Gate failing = new(StageAllThenThrow);
             Gate healthy = new(gate => StageAll(gate, "healthy"));
             ConversationSession session = HookSessions.Create(HookSessions.OneAgentYaml, model, [failing, healthy]);
 

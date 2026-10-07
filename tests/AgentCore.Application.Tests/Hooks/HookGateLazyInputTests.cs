@@ -9,7 +9,10 @@ namespace AgentCore.Application.Tests.Hooks
     {
         private static readonly HookScope Scope = new("c1", "main", 0, "", Guid.CreateVersion7(), 0, DateTimeOffset.UnixEpoch);
 
-        private static RunGate Run() => new(Scope, "agent", nested: false, new Dictionary<string, object?>());
+        private static RunGate Run()
+        {
+            return new(Scope, "agent", nested: false, new Dictionary<string, object?>());
+        }
 
         // The runner seals a view at the deadline even while an abandoned hook is still inside a verb. The
         // verb stays blocked until the seal returned, so a seal that waited for it would only end at the bound.

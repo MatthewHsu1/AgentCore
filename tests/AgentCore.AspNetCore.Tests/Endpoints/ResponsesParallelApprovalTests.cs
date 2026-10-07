@@ -218,7 +218,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 new TwoGatedCallsChatClient(),
                 configure: options =>
                 {
-                    options.AddToolSource(_ => new TwoGatedSource(name => ran[name]++));
+                    _ = options.AddToolSource(_ => new TwoGatedSource(name => ran[name]++));
                     if (hook is not null)
                     {
                         _ = options.UseHooks(hook);

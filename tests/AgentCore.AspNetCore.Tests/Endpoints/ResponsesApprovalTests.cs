@@ -89,7 +89,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 new GatedToolCallingChatClient(),
                 configure: options =>
                 {
-                    options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { })));
+                    _ = options.AddToolSource(_ => new GatedSource(() => GatedSendEmail(() => { })));
                     _ = options.UseHooks(hook);
                 });
 

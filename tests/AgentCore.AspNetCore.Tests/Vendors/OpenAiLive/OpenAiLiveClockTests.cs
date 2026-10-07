@@ -59,6 +59,9 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Same(greeting, running.Sideband.Sent[0]);
         }
 
-        private static bool IsGreeting(JsonObject sent) => (string?)sent["content"] == RunningLiveCall.Greeting;
+        private static bool IsGreeting(JsonObject sent)
+        {
+            return (string?)sent["content"] == RunningLiveCall.Greeting;
+        }
     }
 }

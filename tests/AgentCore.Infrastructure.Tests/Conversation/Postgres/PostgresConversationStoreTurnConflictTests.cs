@@ -33,7 +33,7 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
             Exception? refused = await Record.ExceptionAsync(() => CommitAsync(store, "c1", 1, "second"));
 
             // Assert
-            Assert.IsType<ConversationTurnConflictException>(refused);
+            _ = Assert.IsType<ConversationTurnConflictException>(refused);
             IReadOnlyList<ConversationMessage> rows = await store.ReadAllAsync("c1", Token);
             Assert.Equal(["opener-user", "opener-reply", "first-user", "first-reply"], rows.Select(row => row.MessageId));
             ConversationRecord? record = await store.GetAsync("c1", Token);

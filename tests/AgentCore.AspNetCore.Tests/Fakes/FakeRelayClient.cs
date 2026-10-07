@@ -176,6 +176,18 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             }
         }
 
+        /// <summary>Hangs up as the vendor does: sends its own close frame, then waits for the host's.</summary>
+        /// <remarks>
+        /// <see cref="DisposeAsync"/> aborts the socket, and an abort can reset the connection before the host
+        /// has read what was sent just before it.
+        /// </remarks>
+        /// <returns>A task that completes once the host closed too.</returns>
+        public async Task HangUpAsync()
+        {
+            await _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, TestContext.Current.CancellationToken);
+            _ = await ReadCloseAsync();
+        }
+
         /// <summary>Drops the socket with no close frame, exactly like a conversation that died.</summary>
         public void Abort()
         {

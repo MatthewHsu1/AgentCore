@@ -22,6 +22,8 @@ namespace AgentCore.Application.Runtime.Compaction
 #pragma warning disable MAAI001 // Compaction is evaluation-only in Microsoft.Agents.AI 1.21.0.
     internal sealed class SummaryRowProvider : AIContextProvider
     {
+        private const string Unchanged = "unchanged";
+
         private readonly AgentCoreChatHistoryProvider _history;
 
         private readonly IChatClient _summariser;
@@ -81,14 +83,14 @@ namespace AgentCore.Application.Runtime.Compaction
                 if (gated.Cancelled)
                 {
                     RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Cancelled);
-                    PostEnd(turn, client, "unchanged");
+                    PostEnd(turn, client, Unchanged);
                     return input;
                 }
 
                 if (output.Count == view.Count && output.Zip(view).All(pair => ReferenceEquals(pair.First, pair.Second)))
                 {
                     RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Unchanged);
-                    PostEnd(turn, client, "unchanged");
+                    PostEnd(turn, client, Unchanged);
                     return input;
                 }
 
@@ -100,7 +102,7 @@ namespace AgentCore.Application.Runtime.Compaction
                     }
 
                     RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Unchanged);
-                    PostEnd(turn, client, "unchanged");
+                    PostEnd(turn, client, Unchanged);
                     return input;
                 }
 
@@ -108,7 +110,7 @@ namespace AgentCore.Application.Runtime.Compaction
                 if (coversUpTo <= floor.CoversUpTo || !_history.Compact(session, output[0], coversUpTo, floor.Revision))
                 {
                     RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Unchanged);
-                    PostEnd(turn, client, "unchanged");
+                    PostEnd(turn, client, Unchanged);
                     return input;
                 }
 
@@ -128,7 +130,7 @@ namespace AgentCore.Application.Runtime.Compaction
                 if (gated.Cancelled)
                 {
                     RaiseCompacted(turn, gated, messages.Count, messages.Count, CompactionOutcome.Cancelled);
-                    PostEnd(turn, client, "unchanged");
+                    PostEnd(turn, client, Unchanged);
                     return input;
                 }
 

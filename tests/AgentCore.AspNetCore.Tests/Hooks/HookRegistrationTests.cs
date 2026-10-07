@@ -3,7 +3,6 @@ using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Ports;
-using AgentCore.Application.Secrets;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Tests.DependencyInjection;
@@ -208,7 +207,10 @@ namespace AgentCore.AspNetCore.Tests.Hooks
 
             public override TimeSpan? NoticeTimeout => null;
 
-            public void Release() => _release.TrySetResult();
+            public void Release()
+            {
+                _ = _release.TrySetResult();
+            }
 
             public override async ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken)
             {

@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-using AgentCore.Application.Conversation.Memory;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection.Startup;

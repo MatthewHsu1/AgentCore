@@ -5,7 +5,6 @@ using AgentCore.Application.Providers;
 using AgentCore.AspNetCore.Voice.Ports;
 using AgentCore.AspNetCore.Voice.Routing;
 using AgentCore.AspNetCore.Voice.Turns;
-using Microsoft.AspNetCore.Http;
 
 namespace AgentCore.AspNetCore.DependencyInjection.Startup
 {

@@ -2,7 +2,6 @@ using AgentCore.Application.Evaluation;
 using AgentCore.Application.Tests.Evaluation.Fakes;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Application.Transcript;
-using AgentCore.TestSupport;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Xunit;

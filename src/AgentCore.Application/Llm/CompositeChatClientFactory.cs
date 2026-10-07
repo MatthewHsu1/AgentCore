@@ -89,7 +89,7 @@ namespace AgentCore.Application.Llm
                     ModelCatalogEntry? found = await catalog
                         .LookupAsync(entry.Kind, entry.Model, cancellationToken)
                         .ConfigureAwait(false);
-                        
+
                     factory._contextWindows[entry.As] = found?.ContextWindow;
                 }
 

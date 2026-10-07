@@ -53,7 +53,7 @@ namespace AgentCore.Application.Tests.Runtime
             LogLine line = Assert.Single(logger.Of(2));
             Assert.DoesNotContain(ThrowingToolBuilder.Message, line.Message, StringComparison.Ordinal);
             Assert.NotNull(line.Exception);
-            Assert.IsType<TimeoutException>(line.Exception);
+            _ = Assert.IsType<TimeoutException>(line.Exception);
             Assert.Contains(ThrowingToolBuilder.Message, line.Exception!.Message, StringComparison.Ordinal);
         }
 

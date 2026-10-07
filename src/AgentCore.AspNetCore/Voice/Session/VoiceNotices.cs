@@ -9,7 +9,10 @@ namespace AgentCore.AspNetCore.Voice.Session
     internal static class VoiceNotices
     {
         /// <summary>The hooks of the conversation behind a port, or <see langword="null"/> for a port that is not a session.</summary>
-        internal static SessionHooks? HooksOf(IConversationPort port) => (port as ConversationSession)?.Hooks;
+        internal static SessionHooks? HooksOf(IConversationPort port)
+        {
+            return (port as ConversationSession)?.Hooks;
+        }
 
         /// <summary>Subscribes for the life of the session. <paramref name="hooks"/> is read per change, so a rebound port is followed.</summary>
         internal static void Attach(VoiceSession session, Func<SessionHooks?> hooks)
@@ -26,20 +29,26 @@ namespace AgentCore.AspNetCore.Voice.Session
             }
         }
 
-        private static VoiceState Of(AgentState state) => state switch
+        private static VoiceState Of(AgentState state)
         {
-            AgentState.Thinking => VoiceState.Thinking,
-            AgentState.Speaking => VoiceState.Speaking,
-            AgentState.Initializing or AgentState.Idle or AgentState.Listening => VoiceState.Listening,
-            _ => VoiceState.Listening,
-        };
+            return state switch
+            {
+                AgentState.Thinking => VoiceState.Thinking,
+                AgentState.Speaking => VoiceState.Speaking,
+                AgentState.Initializing or AgentState.Idle or AgentState.Listening => VoiceState.Listening,
+                _ => VoiceState.Listening,
+            };
+        }
 
-        private static VoiceState Of(UserState state) => state switch
+        private static VoiceState Of(UserState state)
         {
-            UserState.Speaking => VoiceState.Speaking,
-            UserState.Away => VoiceState.Away,
-            UserState.Listening => VoiceState.Listening,
-            _ => VoiceState.Listening,
-        };
+            return state switch
+            {
+                UserState.Speaking => VoiceState.Speaking,
+                UserState.Away => VoiceState.Away,
+                UserState.Listening => VoiceState.Listening,
+                _ => VoiceState.Listening,
+            };
+        }
     }
 }

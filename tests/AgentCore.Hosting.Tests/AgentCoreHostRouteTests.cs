@@ -2,9 +2,7 @@ using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.Gates;
 using AgentCore.AspNetCore.DependencyInjection;
-using AgentCore.AspNetCore.Endpoints;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 

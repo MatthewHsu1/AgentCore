@@ -19,7 +19,7 @@ namespace AgentCore.AspNetCore.Tests.Calls
             InstructionsSeenChatClient model = new(new StallOnCueChatClient());
             using PhoneCallHarness harness = PhoneCallHarness.Create(model, []);
 
-            await AskAsync(harness, harness.Host with { FrontVoice = true });
+            await AskAsync(harness.Host with { FrontVoice = true });
 
             Assert.EndsWith("\n" + CallBriefHook.FrontVoiceNote, model.Instructions[^1], StringComparison.Ordinal);
         }
@@ -30,12 +30,12 @@ namespace AgentCore.AspNetCore.Tests.Calls
             InstructionsSeenChatClient model = new(new StallOnCueChatClient());
             using PhoneCallHarness harness = PhoneCallHarness.Create(model, []);
 
-            await AskAsync(harness, harness.Host);
+            await AskAsync(harness.Host);
 
             Assert.DoesNotContain(CallBriefHook.FrontVoiceNote, model.Instructions[^1], StringComparison.Ordinal);
         }
 
-        private static async Task AskAsync(PhoneCallHarness harness, PhoneCallHost host)
+        private static async Task AskAsync(PhoneCallHost host)
         {
             PhoneCall call = (await PhoneCall.AdmitAsync(host, PhoneCallHarness.Offer(), Ct)).Call!;
             await call.StartAsync(Ct);

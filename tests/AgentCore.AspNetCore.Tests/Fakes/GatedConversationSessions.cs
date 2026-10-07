@@ -31,18 +31,36 @@ namespace AgentCore.AspNetCore.Tests.Fakes
         /// <summary>Gets a task that completes once the held lookup reached this store.</summary>
         public TaskCompletionSource TryGetHeld { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public void Arm() => Volatile.Write(ref _armed, 1);
+        public void Arm()
+        {
+            Volatile.Write(ref _armed, 1);
+        }
 
-        public void Release() => _gate.TrySetResult();
+        public void Release()
+        {
+            _ = _gate.TrySetResult();
+        }
 
-        public void Fault(Exception fault) => Volatile.Write(ref _fault, fault);
+        public void Fault(Exception fault)
+        {
+            Volatile.Write(ref _fault, fault);
+        }
 
         /// <summary>Parks the <paramref name="ordinal"/>-th lookup from now on, counting from 1.</summary>
-        public void HoldTryGet(int ordinal) => Volatile.Write(ref _heldTryGet, Volatile.Read(ref _tryGets) + ordinal);
+        public void HoldTryGet(int ordinal)
+        {
+            Volatile.Write(ref _heldTryGet, Volatile.Read(ref _tryGets) + ordinal);
+        }
 
-        public void ReleaseTryGet() => _tryGetGate.TrySetResult();
+        public void ReleaseTryGet()
+        {
+            _ = _tryGetGate.TrySetResult();
+        }
 
-        public void FaultTryGets(Exception fault) => Volatile.Write(ref _tryGetFault, fault);
+        public void FaultTryGets(Exception fault)
+        {
+            Volatile.Write(ref _tryGetFault, fault);
+        }
 
         public async ValueTask<ConversationSession> GetOrOpenAsync(
             string entry, string? conversationId, ConversationSessionState? state, CancellationToken cancellationToken = default)
@@ -77,7 +95,9 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             return await inner.TryGetAsync(entry, conversationId, cancellationToken).ConfigureAwait(false);
         }
 
-        public ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default) =>
-            inner.CloseAsync(entry, conversationId, cancellationToken);
+        public ValueTask CloseAsync(string entry, string conversationId, CancellationToken cancellationToken = default)
+        {
+            return inner.CloseAsync(entry, conversationId, cancellationToken);
+        }
     }
 }

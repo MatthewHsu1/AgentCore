@@ -9,12 +9,15 @@ namespace AgentCore.Application.Tests.Hooks
     {
         private static readonly HookScope Scope = new("c1", "main", 0, "", Guid.CreateVersion7(), 0, DateTimeOffset.UnixEpoch);
 
-        private static ToolGate Tool() => new(
+        private static ToolGate Tool()
+        {
+            return new(
             Scope,
             "price_lookup",
             "call-1",
             new Dictionary<string, object?>(StringComparer.Ordinal) { ["sku"] = "A1" },
             new Dictionary<string, object?>(StringComparer.Ordinal));
+        }
 
         // Calling two terminal verbs throws.
         [Fact]

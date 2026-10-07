@@ -35,7 +35,11 @@ namespace AgentCore.AspNetCore.DependencyInjection
 
             foreach (AgentHook hook in hooks)
             {
-                ArgumentNullException.ThrowIfNull(hook, nameof(hooks));
+                if (hook is null)
+                {
+                    throw new ArgumentNullException(nameof(hooks), "A hook in the list is null.");
+                }
+
                 options.HookFactories.Add((hook.GetType(), _ => hook));
             }
 

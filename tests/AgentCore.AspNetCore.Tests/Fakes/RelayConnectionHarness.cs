@@ -1,4 +1,3 @@
-using System.Net.WebSockets;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Vendors.TelnyxRelay;
@@ -20,15 +19,18 @@ namespace AgentCore.AspNetCore.Tests.Fakes
     {
         private readonly ServiceProvider _services;
         private readonly TestHostLifetime _lifetime;
+        private readonly CancellationTokenSource _requestAborted;
 
         private RelayConnectionHarness(
             ServiceProvider services,
             TestHostLifetime lifetime,
+            CancellationTokenSource requestAborted,
             FakeWebSocket socket,
             Task connection)
         {
             _services = services;
             _lifetime = lifetime;
+            _requestAborted = requestAborted;
             Socket = socket;
             Connection = connection;
         }
@@ -94,7 +96,8 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                 await service.StartingAsync(CancellationToken.None);
             }
 
-            DefaultHttpContext http = new() { RequestServices = provider };
+            CancellationTokenSource requestAborted = new();
+            DefaultHttpContext http = new() { RequestServices = provider, RequestAborted = requestAborted.Token };
             http.Request.RouteValues[ConversationEndpointRouteBuilderExtensions.EntryRouteParameter] = entry;
 
             TelnyxRelayOptions options = new();
@@ -103,8 +106,15 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             FakeWebSocket socket = new();
             Task connection = TelnyxRelayConnection.RunAsync(http, socket, options);
 
-            return new RelayConnectionHarness(provider, lifetime, socket, connection);
+            return new RelayConnectionHarness(provider, lifetime, requestAborted, socket, connection);
         }
+
+        /// <summary>Aborts the request, as Kestrel does once the peer's connection drops.</summary>
+        public void DropPeer()
+        {
+            _requestAborted.Cancel();
+        }
+
         /// <summary>Stops the host, which is what the <c>EndpointUnavailable</c> close status reports.</summary>
         public void StopApplication()
         {
@@ -130,6 +140,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
             }
 
             Socket.Dispose();
+            _requestAborted.Dispose();
             _lifetime.Dispose();
             await _services.DisposeAsync().ConfigureAwait(false);
         }

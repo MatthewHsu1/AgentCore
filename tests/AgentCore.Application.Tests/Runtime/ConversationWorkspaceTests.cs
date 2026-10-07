@@ -136,7 +136,7 @@ namespace AgentCore.Application.Tests.Runtime
         {
             // The marker write must never be load-bearing for the conversation getting a working folder: a
             // collision at the marker's path only means the boot sweep will never consider this folder.
-            Directory.CreateDirectory(ConversationWorkspace.MarkerPathFor(Path.Combine(_root, "conversation-1")));
+            _ = Directory.CreateDirectory(ConversationWorkspace.MarkerPathFor(Path.Combine(_root, "conversation-1")));
             using RecordingLoggerFactory loggers = new();
             ILogger logger = loggers.CreateLogger("x");
 

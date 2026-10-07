@@ -1,4 +1,3 @@
-using Microsoft.Agents.AI;
 using AgentCore.Application.Runtime.Agents;
 using AgentCore.Application.Runtime.Session;
 

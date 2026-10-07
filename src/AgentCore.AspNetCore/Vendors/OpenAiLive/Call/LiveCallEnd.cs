@@ -57,7 +57,10 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 
         /// <summary>Marks the call finished.</summary>
         /// <returns><see langword="false"/> when it already was.</returns>
-        internal bool TryFinish() => Interlocked.Exchange(ref _finished, 1) == 0;
+        internal bool TryFinish()
+        {
+            return Interlocked.Exchange(ref _finished, 1) == 0;
+        }
 
         internal void Now(ConversationEndReason reason, string cause)
         {
@@ -148,8 +151,10 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
             }
         }
 
-        private ITimer QuietTimer() =>
-            time.CreateTimer(_ => Now(ConversationEndReason.AgentCompleted, OpenAiLiveCall.AgentEndedCause), null, OpenAiLiveCall.EndQuietWait, Timeout.InfiniteTimeSpan);
+        private ITimer QuietTimer()
+        {
+            return time.CreateTimer(_ => Now(ConversationEndReason.AgentCompleted, OpenAiLiveCall.AgentEndedCause), null, OpenAiLiveCall.EndQuietWait, Timeout.InfiniteTimeSpan);
+        }
 
         private void AckLate(string eventId)
         {

@@ -125,19 +125,33 @@ namespace AgentCore.Application.Tests.Tools
             Assert.Contains("size 64 is outside 0..32 bytes", result["message"]!.GetValue<string>(), StringComparison.Ordinal);
         }
 
+        [Theory]
+        [InlineData("out/a/report.csv", "sandbox:/report.csv")]
+        [InlineData("out/b/report.csv", "sandbox:/report.csv")]
+        [InlineData("out/Q3 report (final).csv", "sandbox:/Q3%20report%20%28final%29.csv")]
+        [InlineData("out/100%.csv", "sandbox:/100%25.csv")]
+        public async Task Publish_AFileInAFolder_LinksByTheStoredNameEscaped(string path, string expected)
+        {
+            string full = Path.Combine(_root, "conversation-1", path);
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            File.WriteAllText(full, "a\n");
+
+            JsonObject result = await PublishAsync(path);
+
+            Assert.Equal(expected, result["link"]!.GetValue<string>());
+        }
+
         [Fact]
-        public async Task Publish_AGoodFile_StoresItUnderTheConversationLinksItAndFilesTheCardOnTheTurn()
+        public async Task Publish_AGoodFile_StoresItUnderTheConversationNamesItBySandboxLinkAndFilesTheCardOnTheTurn()
         {
             File.WriteAllText(Path.Combine(_root, "conversation-1", "rows.csv"), "a,b\n1,2\n");
             TurnFiles files = new();
 
             JsonObject result = await PublishAsync("rows.csv", title: "Sales by month", files: files);
 
-            Assert.False(ToolErrorResult.IsError(result));
-            Assert.Equal("rows.csv", result["name"]!.GetValue<string>());
-            Assert.Equal("text/csv", result["mediaType"]!.GetValue<string>());
-            Assert.Equal(8, result["length"]!.GetValue<long>());
-            Assert.Equal("https://blobs.test/conversation-1/rows.csv?ttl=900", result["url"]!.GetValue<string>());
+            Assert.True(JsonNode.DeepEquals(
+                new JsonObject { ["name"] = "rows.csv", ["mediaType"] = "text/csv", ["length"] = 8, ["link"] = "sandbox:/rows.csv" },
+                result));
 
             (string? mediaType, byte[]? bytes) = _blobs.Blobs[("conversation-1", "rows.csv")];
             Assert.Equal("text/csv", mediaType);

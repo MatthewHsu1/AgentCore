@@ -5,11 +5,6 @@ using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Voice.Ports;
 using AgentCore.AspNetCore.Voice.Routing;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Hosting.Server;
-using Microsoft.AspNetCore.Hosting.Server.Features;
-using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -81,7 +76,7 @@ namespace AgentCore.AspNetCore.Tests.Voice
             _ = builder.Logging.ClearProviders();
             WebApplication app = builder.Build();
 
-            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(() => app.MapCall());
+            InvalidOperationException failure = Assert.Throws<InvalidOperationException>(app.MapCall);
 
             Assert.Contains("AddAgentCore", failure.Message, StringComparison.Ordinal);
         }
@@ -104,19 +99,6 @@ namespace AgentCore.AspNetCore.Tests.Voice
             _ = options.UseSpeech(new FakeSpeech(conversationKind));
 
             return ConversationSeamStartup.Build(ConfigurationLoader.LoadYaml(Document(conversationKind)), options);
-        }
-
-        /// <summary>Reads back the port the server bound, since the test asked for any free one.</summary>
-        /// <param name="app">The started application.</param>
-        /// <returns>The base address to send to.</returns>
-        private static string Address(WebApplication app)
-        {
-            return app.Services
-                        .GetRequiredService<IServer>()
-                        .Features
-                        .Get<IServerAddressesFeature>()!
-                        .Addresses
-                        .First();
         }
 
         /// <summary>Writes one document that names both blocks that require each other.</summary>

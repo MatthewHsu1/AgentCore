@@ -12,7 +12,7 @@ namespace AgentCore.Application.Tests.Tools
         {
             if (Interlocked.Increment(ref _arrived) >= parties)
             {
-                _met.TrySetResult();
+                _ = _met.TrySetResult();
             }
 
             await _met.Task.WaitAsync(cancellationToken);

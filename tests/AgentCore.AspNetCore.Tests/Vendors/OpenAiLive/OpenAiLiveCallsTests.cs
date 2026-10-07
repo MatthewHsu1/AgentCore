@@ -44,7 +44,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             TaskCompletionSource<bool> hangUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
             TaskCompletionSource hangingUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
             using CancellationTokenSource stop = new();
-            calls.Run(await StartedCallAsync(harness, new FakeSideband(), _ => { hangingUp.TrySetResult(); return hangUp.Task; }, null));
+            calls.Run(await StartedCallAsync(harness, new FakeSideband(), ct => { _ = hangingUp.TrySetResult(); return hangUp.Task; }, null));
 
             Task stopping = calls.StopAsync(stop.Token);
             await hangingUp.Task;
@@ -52,7 +52,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Exception? stopped = await Record.ExceptionAsync(() => stopping.WaitAsync(TimeSpan.FromSeconds(10), Ct));
             _ = hangUp.TrySetResult(true);
 
-            Assert.IsAssignableFrom<OperationCanceledException>(stopped);
+            _ = Assert.IsType<OperationCanceledException>(stopped, exactMatch: false);
         }
 
         // The host's stop ends a live call the way a normal end does, so the line the caller was still

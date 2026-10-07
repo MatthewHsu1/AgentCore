@@ -1,6 +1,4 @@
 using AgentCore.Application.Conversation;
-using AgentCore.Application.Diagnostics;
-using AgentCore.Application.Hooks;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Transcript;
 using Microsoft.Agents.AI;
@@ -158,10 +156,9 @@ namespace AgentCore.Application.Runtime.Session
         /// <summary>Whether the store holds every one of these rows, including a row a newer summary now stands in for.</summary>
         private async ValueTask<bool> LandedAsync(IReadOnlyList<string> held, HashSet<string> read, CancellationToken cancellationToken)
         {
-            foreach (string messageId in held)
+            foreach (string messageId in held.Where(id => !read.Contains(id)))
             {
-                if (!read.Contains(messageId)
-                    && await _session.Compiled.ConversationStore.OrdinalOfAsync(_session.ConversationId, messageId, cancellationToken).ConfigureAwait(false) is null)
+                if (await _session.Compiled.ConversationStore.OrdinalOfAsync(_session.ConversationId, messageId, cancellationToken).ConfigureAwait(false) is null)
                 {
                     return false;
                 }

@@ -1,4 +1,3 @@
-using AgentCore.TestSupport;
 using AgentCore.Application.Diagnostics;
 using AgentCore.Application.Tests.Runtime;
 using Microsoft.Extensions.AI;

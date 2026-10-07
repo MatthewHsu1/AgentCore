@@ -55,10 +55,10 @@ namespace AgentCore.Application.Tests.Runtime
         public void GitCloneIntoTheWorkspaceSucceeds()
         {
             string src = Directory.CreateDirectory(Path.Combine(_root, "src-repo")).FullName;
-            Run(src, "git", "init", "-q");
+            _ = Run(src, "git", "init", "-q");
             File.WriteAllText(Path.Combine(src, "a.txt"), "a");
-            Run(src, "git", "-c", "user.email=a@b", "-c", "user.name=a", "add", ".");
-            Run(src, "git", "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x");
+            _ = Run(src, "git", "-c", "user.email=a@b", "-c", "user.name=a", "add", ".");
+            _ = Run(src, "git", "-c", "user.email=a@b", "-c", "user.name=a", "commit", "-qm", "x");
 
             ConversationWorkspace workspace = ConversationWorkspace.Create(_root, "c1");
 

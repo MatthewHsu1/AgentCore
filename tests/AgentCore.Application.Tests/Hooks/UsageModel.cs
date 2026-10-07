@@ -6,13 +6,15 @@ namespace AgentCore.Application.Tests.Hooks
     /// <summary>Streams one text update and one usage update.</summary>
     internal sealed class UsageModel : IChatClient
     {
-        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "hi"))
+        public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, "hi"))
             {
                 ModelId = "test-model",
                 FinishReason = ChatFinishReason.Stop,
                 Usage = new UsageDetails { InputTokenCount = 11, OutputTokenCount = 3, CachedInputTokenCount = 5 },
             });
+        }
 
         public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
             IEnumerable<ChatMessage> messages, ChatOptions? options = null, [EnumeratorCancellation] CancellationToken cancellationToken = default)
@@ -24,8 +26,10 @@ namespace AgentCore.Application.Tests.Hooks
             }
         }
 
-        public object? GetService(Type serviceType, object? serviceKey = null) =>
-            serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            return serviceKey is null && serviceType.IsInstanceOfType(this) ? this : null;
+        }
 
         public void Dispose()
         {

@@ -163,7 +163,9 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Empty(ledger.Flush());
         }
 
-        private static void Say(LiveTranscriptLedger ledger, Speaker speaker, string delta, int start, int end) =>
+        private static void Say(LiveTranscriptLedger ledger, Speaker speaker, string delta, int start, int end)
+        {
             _ = ledger.Add(new LiveEvent.Transcript(speaker, delta, start, end));
+        }
     }
 }

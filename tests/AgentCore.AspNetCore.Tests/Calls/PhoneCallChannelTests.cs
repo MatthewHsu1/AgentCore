@@ -30,7 +30,10 @@ namespace AgentCore.AspNetCore.Tests.Calls
 
         private sealed class AcceptingChannel : IConversationChannel
         {
-            public ChannelCommandResult Send(ChannelCommand command) => ChannelCommandResult.Scheduled;
+            public ChannelCommandResult Send(ChannelCommand command)
+            {
+                return ChannelCommandResult.Scheduled;
+            }
         }
     }
 }

@@ -102,7 +102,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
                     finally
                     {
                         // The consumer asked for the next event, or stopped reading: either way it is done with this one.
-                        handled.TrySetResult();
+                        _ = handled.TrySetResult();
                     }
                 }
             }
@@ -113,7 +113,7 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
 
                 while (_inputs.Reader.TryRead(out (ConversationInput Input, TaskCompletionSource Handled) orphan))
                 {
-                    orphan.Handled.TrySetResult();
+                    _ = orphan.Handled.TrySetResult();
                 }
             }
         }

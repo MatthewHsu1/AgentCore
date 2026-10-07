@@ -152,7 +152,7 @@ namespace AgentCore.Application.Tests.Runtime
             }
             finally
             {
-                slow.Open.TrySetResult();
+                _ = slow.Open.TrySetResult();
             }
         }
 

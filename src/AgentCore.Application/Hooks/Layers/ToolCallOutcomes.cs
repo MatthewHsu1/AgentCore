@@ -21,12 +21,16 @@ namespace AgentCore.Application.Hooks.Layers
             arguments.Context[key] = true;
         }
 
-        internal static bool Marked(AIFunctionArguments arguments, object key) =>
-            arguments.Context?.ContainsKey(key) == true;
+        internal static bool Marked(AIFunctionArguments arguments, object key)
+        {
+            return arguments.Context?.ContainsKey(key) == true;
+        }
 
-        internal static ToolOutcome Of(AIFunctionArguments arguments) =>
-            Marked(arguments, TimedOutKey) ? ToolOutcome.TimedOut
+        internal static ToolOutcome Of(AIFunctionArguments arguments)
+        {
+            return Marked(arguments, TimedOutKey) ? ToolOutcome.TimedOut
             : Marked(arguments, CachedKey) ? ToolOutcome.Cached
             : ToolOutcome.Ok;
+        }
     }
 }

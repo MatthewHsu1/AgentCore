@@ -1,3 +1,4 @@
+using System.Text.Json.Nodes;
 using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.Domain;
 using Microsoft.Extensions.Logging;
@@ -36,11 +37,13 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
 
                 try
                 {
-                    await reply.WaitUntilStreamingAsync().WaitAsync(bounded.Token);
+                    // The first piece must reach the relay, not just leave the model: a prompt that lands before it
+                    // cuts a reply that never spoke, and that reply sends no closing frame to wait for.
+                    JsonNode opening = await relay.ReadFrameAsync().WaitAsync(bounded.Token);
                     await relay.SendAsync(RelayFrames.Prompt("two", last: true));
 
                     // Turn one closes its reply as it is interrupted, with only what reached the relay.
-                    first = await relay.ReadTextFramesUntilLastAsync().WaitAsync(bounded.Token);
+                    first = [opening["token"]!.GetValue<string>(), .. await relay.ReadTextFramesUntilLastAsync().WaitAsync(bounded.Token)];
                 }
                 catch (OperationCanceledException) when (deadline.IsCancellationRequested)
                 {

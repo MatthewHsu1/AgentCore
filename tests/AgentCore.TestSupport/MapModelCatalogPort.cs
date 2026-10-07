@@ -9,7 +9,7 @@ namespace AgentCore.TestSupport
     /// </summary>
     public sealed class MapModelCatalogPort : IModelCatalogPort
     {
-        private readonly Dictionary<(string Provider, string Model), ModelCatalogEntry> _values = new();
+        private readonly Dictionary<(string Provider, string Model), ModelCatalogEntry> _values = [];
 
         /// <summary>Adds one provider and model pair's entry, and returns this catalog.</summary>
         public MapModelCatalogPort With(string provider, string model, int contextWindow)

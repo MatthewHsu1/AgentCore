@@ -1,6 +1,4 @@
 using AgentCore.Application.Hooks.Notices;
-using AgentCore.Application.Ports;
-using AgentCore.Application.Runtime;
 using AgentCore.Application.Runtime.Session;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
@@ -19,8 +17,6 @@ namespace AgentCore.AspNetCore.Tests.Voice
 {
     public sealed class VoiceActivityHooksTests
     {
-        private static CancellationToken Ct => TestContext.Current.CancellationToken;
-
         // With no sink injected, a reply's clocks and the session's states reach the
         // conversation's hooks as notices, the readings stamped with the engine turn they belong to.
         [Fact(Timeout = 60_000)]

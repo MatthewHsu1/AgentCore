@@ -121,8 +121,8 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             HttpResponseMessage redelivered = await host.PostWebhookAsync(OpenAiLiveHost.IncomingCall("rtc_123"), webhookId: "wh_2");
 
             Assert.Equal((HttpStatusCode.OK, HttpStatusCode.OK), (repeated.StatusCode, redelivered.StatusCode));
-            Assert.Single(host.Control.Requests);
-            Assert.Single(host.Attached);
+            _ = Assert.Single(host.Control.Requests);
+            _ = Assert.Single(host.Attached);
         }
 
         [Fact(Timeout = 30_000)]
@@ -175,7 +175,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Equal(
                 ["/v1/live/sessions/rtc_1/accept", "/v1/live/sessions/rtc_2/accept"],
                 host.Control.Requests.Select(seen => seen.Path).Where(path => path.EndsWith("/accept", StringComparison.Ordinal)));
-            Assert.Single(host.Attached);
+            _ = Assert.Single(host.Attached);
 
             // A thrown accept is unknown, so the call is hung up; a refused one is rejected, so the caller is not left ringing.
             RecordingLiveControl.Seen[] first = [.. host.Control.Requests.Where(seen => seen.Path.StartsWith("/v1/live/sessions/rtc_1/", StringComparison.Ordinal) && !seen.Path.EndsWith("/accept", StringComparison.Ordinal))];

@@ -18,7 +18,7 @@ namespace AgentCore.AspNetCore.Voice.Threading
         /// </returns>
         public static async Task CancelAndWaitAsync(CancellationTokenSource cancellation, IEnumerable<Task> tasks)
         {
-            cancellation.Cancel();
+            await cancellation.CancelAsync().ConfigureAwait(false);
 
             foreach (Task task in tasks)
             {

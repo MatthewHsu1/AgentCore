@@ -137,7 +137,10 @@ namespace AgentCore.AspNetCore.Calls
         }
 
         // The engine's own fallback for this entry: the entry's fallbackReply, else the document's.
-        private CallAnswer Fallback() => CallAnswer.FallbackOf(call.Session.Compiled.FallbackReply);
+        private CallAnswer Fallback()
+        {
+            return CallAnswer.FallbackOf(call.Session.Compiled.FallbackReply);
+        }
 
         // Every ask hangs off the last message the caller heard an answer to, so a resend on the same
         // parent withdraws an unanswered ask, whether or not its turn filed a row yet. The first anchor is the last

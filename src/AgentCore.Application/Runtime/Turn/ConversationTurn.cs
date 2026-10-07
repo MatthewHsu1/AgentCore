@@ -2,7 +2,6 @@ using System.Diagnostics;
 using AgentCore.Domain.Knowledge;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using AgentCore.Application.Runtime.Turn.Lifecycle;
 
 namespace AgentCore.Application.Runtime.Turn
 {

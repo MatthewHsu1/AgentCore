@@ -4,7 +4,6 @@ using AgentCore.Application.Tests.Audit;
 using AgentCore.Application.Tests.Fakes;
 using AgentCore.Domain;
 using AgentCore.Domain.Audit;
-using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 using AgentCore.Application.Runtime.Cut;
@@ -95,7 +94,7 @@ namespace AgentCore.Application.Tests.Runtime
 
             // Act
             bool recorded = session.Cut(1, new TurnCut(string.Empty, null));
-            model.Release.TrySetResult();
+            _ = model.Release.TrySetResult();
             await drain;
             await session.FlushTranscriptAsync();
 

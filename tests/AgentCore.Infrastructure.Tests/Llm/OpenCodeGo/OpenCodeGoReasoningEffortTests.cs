@@ -3,7 +3,6 @@
 using System.Net;
 using AgentCore.Application.Configuration.Parsing;
 using AgentCore.Application.Configuration.Schema;
-using AgentCore.Application.Secrets;
 using AgentCore.Infrastructure.Llm.OpenCodeGo;
 using AgentCore.Infrastructure.Tests.Fakes;
 using AgentCore.Infrastructure.Tests.Tools;
@@ -156,7 +155,7 @@ namespace AgentCore.Infrastructure.Tests.Llm.OpenCodeGo
                 },
                 Token);
 
-            Assert.Single(endpoint.Requests);
+            _ = Assert.Single(endpoint.Requests);
             Assert.Contains("\"reasoning\":{\"effort\":\"high\"}", body, StringComparison.Ordinal);
             Assert.Contains("\"store\":false", body, StringComparison.Ordinal);
         }

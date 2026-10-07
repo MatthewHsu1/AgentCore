@@ -13,7 +13,6 @@ using Microsoft.Extensions.AI;
 using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using Xunit;
-using AgentCore.Application.Runtime.Clarification;
 using AgentCore.Application.Runtime.Session;
 
 namespace AgentCore.Infrastructure.Tests.Knowledge.VectorData.Qdrant

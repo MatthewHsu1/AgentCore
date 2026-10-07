@@ -54,6 +54,7 @@ namespace AgentCore.Application.Runtime.Turn.Lifecycle
             await foreach (ChatResponseUpdate _ in RunTurnStreamingIteratorAsync(userInput, origin, result, cancellationToken)
                 .ConfigureAwait(false))
             {
+                // Only the result box matters here; the updates are read so the turn runs to its end.
             }
 
             return result.Value!;
@@ -229,9 +230,12 @@ namespace AgentCore.Application.Runtime.Turn.Lifecycle
                     await stream.DisposeAsync().ConfigureAwait(false);
                 }
 
-                result?.Value = completion.Result
-                    ?? throw new InvalidOperationException(
-                        $"The turn {turn.Index} of the conversation '{_session.ConversationId}' ended without a seal.");
+                if (result is not null)
+                {
+                    result.Value = completion.Result
+                        ?? throw new InvalidOperationException(
+                            $"The turn {turn.Index} of the conversation '{_session.ConversationId}' ended without a seal.");
+                }
             }
             finally
             {

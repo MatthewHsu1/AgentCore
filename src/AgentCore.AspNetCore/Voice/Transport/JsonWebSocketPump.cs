@@ -14,11 +14,16 @@ namespace AgentCore.AspNetCore.Voice.Transport
     /// Cancelled once, for any reason the socket is going away: the request aborted, the host is
     /// stopping, or one of the connection's own tasks ended.
     /// </param>
+    /// <param name="peerGoneToken">
+    /// Cancelled once the peer's connection dropped. The pump then reads on until the socket reports the drop, so the
+    /// frames the peer sent before it went still reach the conversation.
+    /// </param>
     internal sealed class JsonWebSocketPump(
         WebSocket socket,
         JsonWebSocketPumpOptions options,
         TimeProvider timeProvider,
-        CancellationToken connectionToken)
+        CancellationToken connectionToken,
+        CancellationToken peerGoneToken)
     {
         private bool _loggedUnknownFrame;
         private bool _loggedRefusedFrameBody;
@@ -43,7 +48,7 @@ namespace AgentCore.AspNetCore.Voice.Transport
 
             try
             {
-                while (!connectionToken.IsCancellationRequested)
+                while (!connectionToken.IsCancellationRequested || peerGoneToken.IsCancellationRequested)
                 {
                     message.ResetWrittenCount();
 
@@ -69,7 +74,8 @@ namespace AgentCore.AspNetCore.Voice.Transport
                     Task idling = Task.Delay(options.IdleTimeout, timeProvider, idleCancel.Token);
                     Task<ValueWebSocketReceiveResult> receiving = socket.ReceiveAsync(rented.AsMemory(), CancellationToken.None).AsTask();
 
-                    if (await Task.WhenAny(receiving, idling).ConfigureAwait(false) != receiving)
+                    if (await Task.WhenAny(receiving, idling).ConfigureAwait(false) != receiving
+                        && !(peerGoneToken.IsCancellationRequested && await ReceivedBeforeCloseTimeoutAsync(receiving).ConfigureAwait(false)))
                     {
                         // idling won: either IdleTimeout actually elapsed, or the connection token
                         // itself fired and cancelled this Task.Delay along with it — host stopping, or
@@ -176,6 +182,18 @@ namespace AgentCore.AspNetCore.Voice.Transport
                     .ReceiveAsync(rented.AsMemory(), connectionToken)
                     .ConfigureAwait(false);
             }
+        }
+
+        /// <summary>
+        /// Waits for the receive the peer's drop cancelled the idle race of. The peer can send its last words and drop
+        /// the line at once, and the drop can reach the request before the receive hands over those words, which are
+        /// already on the socket; once they are read, the next receive reports the drop.
+        /// </summary>
+        /// <param name="receiving">The receive still in flight.</param>
+        /// <returns><see langword="true"/> when the receive completed inside the close timeout.</returns>
+        private async Task<bool> ReceivedBeforeCloseTimeoutAsync(Task<ValueWebSocketReceiveResult> receiving)
+        {
+            return await Task.WhenAny(receiving, Task.Delay(options.CloseTimeout, CancellationToken.None)).ConfigureAwait(false) == receiving;
         }
 
         /// <summary>Logs, or closes the socket over, a message the parser produced no frame for.</summary>

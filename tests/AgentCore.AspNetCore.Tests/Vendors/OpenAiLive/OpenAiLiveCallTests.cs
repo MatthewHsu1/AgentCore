@@ -176,7 +176,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             await running.Sideband.WaitForDrainAsync();
 
             Assert.False(sentBeforeTheStart);
-            Assert.Single(running.Sideband.Sent, sent => (string?)sent["content"] == RunningLiveCall.Greeting);
+            _ = Assert.Single(running.Sideband.Sent, sent => (string?)sent["content"] == RunningLiveCall.Greeting);
         }
 
         // A call whose conversation a newer call took is hung up, and says nothing.

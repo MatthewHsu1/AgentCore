@@ -1,11 +1,9 @@
-using AgentCore.Application.Conversation;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain.Audit;
 using AgentCore.Domain.Sources;
 using AgentCore.Infrastructure.Audit.Postgres;
 using AgentCore.Infrastructure.Conversation.Postgres;
 using AgentCore.Infrastructure.Tests.Database.Postgres;
-using AgentCore.TestSupport;
 using Microsoft.Extensions.AI;
 using Xunit;
 

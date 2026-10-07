@@ -194,9 +194,7 @@ tools:
   - { id: search, kind: builtin, uses: web.search }
 
   # kind: builtin, a plain function. The model calls it when a file in the conversation's workspace is a
-  # deliverable: the file is copied into providers.blobs (see 8. providers), owned by the conversation,
-  # and the person gets a link. Files not published are lost when the conversation ends. Needs
-  # providers.blobs and options.UseWorkspace(...) on the host; missing either fails the boot.
+  # deliverable: the file is copied into providers.blobs.
   - { id: publish, kind: builtin, uses: file.publish }
 
   # kind: binding, typed form. Not used in this example. The host registered

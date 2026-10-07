@@ -31,12 +31,12 @@ namespace AgentCore.Application.Tests.Hooks
         {
             const int Runs = 5_000;
             GateRunner runner = new(HookTable.Build([.. NoOps(hooks)]), NullLogger.Instance, TimeProvider.System);
-            await RunAsync(runner);
+            _ = await RunAsync(runner);
 
             long started = Stopwatch.GetTimestamp();
             for (int run = 0; run < Runs; run++)
             {
-                await RunAsync(runner);
+                _ = await RunAsync(runner);
             }
 
             double mean = Stopwatch.GetElapsedTime(started).TotalMicroseconds / Runs;
@@ -60,8 +60,9 @@ namespace AgentCore.Application.Tests.Hooks
             Assert.True(medians[2] - medians[0] < AddedPerTurnMicroseconds, $"five hooks added {medians[2] - medians[0]:0.0} µs to one turn");
         }
 
-        private static ValueTask<int> RunAsync(GateRunner runner) =>
-            runner.RunAsync(
+        private static ValueTask<int> RunAsync(GateRunner runner)
+        {
+            return runner.RunAsync(
                 GatePoint.BeforeTool,
                 Scope,
                 0,
@@ -71,6 +72,7 @@ namespace AgentCore.Application.Tests.Hooks
                 static state => state,
                 raiseFault: null,
                 CancellationToken.None);
+        }
 
         // The median of 50 timed turns per hook list, which is steadier than a mean. The lists take turns, so a
         // slow spell of the machine lands on all of them alike, and the first round is an untimed warm-up.
@@ -96,17 +98,32 @@ namespace AgentCore.Application.Tests.Hooks
             return [.. times.Select(static list => list.Order().ElementAt(list.Count / 2))];
         }
 
-        private static IEnumerable<AgentHook> NoOps(int count) => Enumerable.Range(0, count).Select(_ => new NoOp());
+        private static IEnumerable<AgentHook> NoOps(int count)
+        {
+            return Enumerable.Range(0, count).Select(_ => new NoOp());
+        }
 
         private sealed class NoOp : AgentHook
         {
-            public override ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken) => default;
+            public override ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken)
+            {
+                return default;
+            }
 
-            public override ValueTask AfterToolAsync(ToolResultGate gate, CancellationToken cancellationToken) => default;
+            public override ValueTask AfterToolAsync(ToolResultGate gate, CancellationToken cancellationToken)
+            {
+                return default;
+            }
 
-            public override ValueTask BeforeModelAsync(ModelGate gate, CancellationToken cancellationToken) => default;
+            public override ValueTask BeforeModelAsync(ModelGate gate, CancellationToken cancellationToken)
+            {
+                return default;
+            }
 
-            public override ValueTask AfterModelAsync(ModelResultGate gate, CancellationToken cancellationToken) => default;
+            public override ValueTask AfterModelAsync(ModelResultGate gate, CancellationToken cancellationToken)
+            {
+                return default;
+            }
         }
     }
 }

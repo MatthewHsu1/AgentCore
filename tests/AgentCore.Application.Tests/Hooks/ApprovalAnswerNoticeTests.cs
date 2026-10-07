@@ -4,7 +4,6 @@ using AgentCore.Application.Hooks.Notices;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
 using AgentCore.Application.Sessions.Memory;
-using AgentCore.Application.Tests.Sessions;
 using AgentCore.Domain;
 using AgentCore.TestSupport;
 using Microsoft.Agents.AI;

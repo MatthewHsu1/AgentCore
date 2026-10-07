@@ -31,15 +31,26 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
         """;
 
         // Every call opens with the session instructions and the greeting (see TheCallTellsGptLiveToGreetTheCallerFirst).
-        internal static IEnumerable<JsonObject> AfterTheGreeting(RunningLiveCall running) =>
-            running.Sideband.Sent.Where(sent => (string?)sent["type"] != "session.instructions.append" && !IsGreeting(sent));
+        internal static IEnumerable<JsonObject> AfterTheGreeting(RunningLiveCall running)
+        {
+            return running.Sideband.Sent.Where(sent => (string?)sent["type"] != "session.instructions.append" && !IsGreeting(sent));
+        }
 
         // An answer's commentary names its delegation; the greeting's names none.
-        internal static bool IsCommentary(JsonObject sent) => (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend && sent["delegation_id"] is not null;
+        internal static bool IsCommentary(JsonObject sent)
+        {
+            return (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend && sent["delegation_id"] is not null;
+        }
 
-        private static bool IsGreeting(JsonObject sent) => (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend && sent["delegation_id"] is null;
+        private static bool IsGreeting(JsonObject sent)
+        {
+            return (string?)sent["type"] == OpenAiLiveEvents.CommentaryAppend && sent["delegation_id"] is null;
+        }
 
-        internal static string? TypeOf(string json) => (string?)JsonNode.Parse(json)!["type"];
+        internal static string? TypeOf(string json)
+        {
+            return (string?)JsonNode.Parse(json)!["type"];
+        }
 
         internal static async Task PushAndDrainAsync(RunningLiveCall running, IEnumerable<string> events)
         {

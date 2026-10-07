@@ -154,7 +154,7 @@ namespace AgentCore.Application.Tests.Runtime
             // Assert
             _ = await Assert.ThrowsAsync<ConversationTurnConflictException>(() => starting);
             AuditEvent refused = Assert.Single(await session.RowsAsync(sink), item => item.Kind == AuditEventKind.TurnRefused);
-            Assert.Equal(((int?)null, "busy"), (refused.TurnIndex, refused.Payload[AuditPayloadKeys.RefusedReason]));
+            Assert.Equal((null, "busy"), (refused.TurnIndex, refused.Payload[AuditPayloadKeys.RefusedReason]));
         }
 
         /// <summary>Subscribes to the one activity source of this library, and no other.</summary>

@@ -13,7 +13,10 @@ namespace AgentCore.Application.Tests.Hooks
     {
         private static readonly FakeTimeProvider Clock = new(DateTimeOffset.UnixEpoch);
 
-        private static NoticeHub Hub(params AgentHook[] hooks) => new(HookTable.Build(hooks), NullLogger.Instance, TimeProvider.System);
+        private static NoticeHub Hub(params AgentHook[] hooks)
+        {
+            return new(HookTable.Build(hooks), NullLogger.Instance, TimeProvider.System);
+        }
 
         // Raising only enqueues, so a hook that never returns cannot hold the raiser.
         [Fact(Timeout = 10_000)]
@@ -29,7 +32,7 @@ namespace AgentCore.Application.Tests.Hooks
                 _ = hub.Raise(NoticeProbes.Started(turn), Clock);
             }
 
-            Assert.Single(blocked.Seen);
+            _ = Assert.Single(blocked.Seen);
             blocked.Hold.SetResult();
             await hub.FlushAsync("c1");
             Assert.Equal([0, 1, 2, 3], blocked.Seen.Select(notice => notice.Scope.TurnIndex ?? -1));
@@ -81,7 +84,7 @@ namespace AgentCore.Application.Tests.Hooks
 
             await NoticeProbes.WaitUntilAsync(() => fast.Seen.Count == 2);
             await slow.Entered.Task;
-            Assert.Single(slow.Seen);
+            _ = Assert.Single(slow.Seen);
             slow.Hold.SetResult();
         }
 
@@ -96,7 +99,7 @@ namespace AgentCore.Application.Tests.Hooks
             await hub.FlushAsync("c1");
             await hub.FlushAsync("c1");
 
-            Assert.Single(recorder.Seen.OfType<TurnStarted>());
+            _ = Assert.Single(recorder.Seen.OfType<TurnStarted>());
             Assert.Equal(2, recorder.Seen.OfType<Fault>().Count(fault => fault.Kind == FaultKind.HookFailed));
         }
 

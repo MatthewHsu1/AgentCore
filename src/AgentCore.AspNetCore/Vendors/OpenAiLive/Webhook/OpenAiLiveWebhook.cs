@@ -245,7 +245,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Webhook
                     return null;
                 }
 
-                body.Write(buffer, 0, read);
+                await body.WriteAsync(buffer.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             }
 
             return body.ToArray();

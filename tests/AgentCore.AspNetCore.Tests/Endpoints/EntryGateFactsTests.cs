@@ -9,7 +9,6 @@ using AgentCore.AspNetCore.Tests.Fakes;
 using AgentCore.AspNetCore.Voice.Ports;
 using AgentCore.AspNetCore.Voice.Routing;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Primitives;
 using Xunit;
 using static AgentCore.AspNetCore.Tests.Endpoints.EntryGateFixture;
@@ -119,7 +118,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
 
             using HttpResponseMessage response = await PostAsync(host);
 
-            Assert.IsType<NotSupportedException>(thrown);
+            _ = Assert.IsType<NotSupportedException>(thrown);
         }
 
         [Fact(Timeout = 60_000)]

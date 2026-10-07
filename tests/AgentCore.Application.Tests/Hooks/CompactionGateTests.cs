@@ -124,7 +124,10 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class Throwing(HookFailure policy) : AgentHook
         {
-            public override HookFailure FailureFor(GatePoint point) => policy;
+            public override HookFailure FailureFor(GatePoint point)
+            {
+                return policy;
+            }
 
             public override ValueTask BeforeCompactionAsync(CompactionGate gate, CancellationToken cancellationToken)
             {

@@ -68,9 +68,15 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.Equal(Fact, (string?)(await sideband.WaitForSentAsync(IsThinking))["content"]);
         }
 
-        private static bool IsGreeting(JsonObject sent) => (string?)sent["content"] == RunningLiveCall.Greeting;
+        private static bool IsGreeting(JsonObject sent)
+        {
+            return (string?)sent["content"] == RunningLiveCall.Greeting;
+        }
 
-        private static bool IsThinking(JsonObject sent) => (string?)sent["type"] == "session.thinking.append";
+        private static bool IsThinking(JsonObject sent)
+        {
+            return (string?)sent["type"] == "session.thinking.append";
+        }
 
         private sealed class TellsOnStart(TaskCompletionSource<ChannelCommandResult> told) : AgentHook
         {

@@ -165,7 +165,7 @@ namespace AgentCore.Application.Sessions.Memory
         /// <exception cref="ArgumentException"><paramref name="root"/> is empty.</exception>
         internal void SweepWorkspaceRoot(string root, ILogger? logger)
         {
-            new WorkspaceRootSweeper(_idleTimeout, _time).Sweep(root, id => _slots.ContainsKey(id), logger);
+            new WorkspaceRootSweeper(_idleTimeout, _time).Sweep(root, _slots.ContainsKey, logger);
         }
 
         /// <summary>Stops every idle timer. A build or a close already running finishes, and wakes its waiters.</summary>

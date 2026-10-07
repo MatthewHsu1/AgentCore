@@ -100,6 +100,7 @@ namespace AgentCore.Application.Runtime.Session
             }
             catch (ObjectDisposedException)
             {
+                // The session is disposed, so no tool is left to stop.
             }
             finally
             {

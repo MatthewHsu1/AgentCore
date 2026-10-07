@@ -196,7 +196,7 @@ namespace AgentCore.Application.Tests.Hooks
             TimeoutException thrown = new("the hook's own backend timed out");
             Hook thrower = new(afterAnAwait
                 ? async (_, _) => { await Task.Yield(); throw thrown; }
-                : (_, _) => throw thrown);
+            : (_, _) => throw thrown);
             using RecordingLoggerFactory logs = new();
             GateRunner runner = new(
                 HookTable.Build([thrower]), logs.CreateLogger("hooks"), new FakeTimeProvider(DateTimeOffset.UnixEpoch));
@@ -230,7 +230,10 @@ namespace AgentCore.Application.Tests.Hooks
                 cancellationToken);
         }
 
-        private static Dictionary<string, object?> Args(string sku) => new(StringComparer.Ordinal) { ["sku"] = sku };
+        private static Dictionary<string, object?> Args(string sku)
+        {
+            return new(StringComparer.Ordinal) { ["sku"] = sku };
+        }
 
         private sealed class Hook(Func<ToolGate, CancellationToken, ValueTask> body) : AgentHook
         {
@@ -246,7 +249,10 @@ namespace AgentCore.Application.Tests.Hooks
                 return body(gate, cancellationToken);
             }
 
-            public override HookFailure FailureFor(GatePoint point) => Failure ?? base.FailureFor(point);
+            public override HookFailure FailureFor(GatePoint point)
+            {
+                return Failure ?? base.FailureFor(point);
+            }
         }
     }
 }

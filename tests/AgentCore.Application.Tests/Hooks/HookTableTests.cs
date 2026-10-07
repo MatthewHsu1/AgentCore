@@ -64,18 +64,26 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class ToolOnly : AgentHook
         {
-            public override ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken) => default;
+            public override ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken)
+            {
+                return default;
+            }
         }
 
         private sealed class NoticeOnly : AgentHook
         {
-            public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken) => default;
+            public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken)
+            {
+                return default;
+            }
         }
 
         private sealed class Hiding : AgentHook
         {
-            public new ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken) =>
+            public new ValueTask BeforeToolAsync(ToolGate gate, CancellationToken cancellationToken)
+            {
                 throw new InvalidOperationException($"{GetType().Name} hides the gate method, so no gate calls it.");
+            }
         }
     }
 }

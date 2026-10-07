@@ -11,24 +11,34 @@ namespace AgentCore.Application.Hooks.BuiltIn
     internal sealed class TelemetryHook : AgentHook
     {
         /// <inheritdoc />
-        public override ValueTask OnConversationStartedAsync(ConversationStarted notice, CancellationToken cancellationToken) =>
-            Audited(AuditEventKind.ConversationStarted);
+        public override ValueTask OnConversationStartedAsync(ConversationStarted notice, CancellationToken cancellationToken)
+        {
+            return Audited(AuditEventKind.ConversationStarted);
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnConversationEndedAsync(ConversationEnded notice, CancellationToken cancellationToken) =>
-            Audited(AuditEventKind.ConversationEnded);
+        public override ValueTask OnConversationEndedAsync(ConversationEnded notice, CancellationToken cancellationToken)
+        {
+            return Audited(AuditEventKind.ConversationEnded);
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken) =>
-            AuditRules.IsAudited(notice) ? Audited(AuditEventKind.TurnRefused) : ValueTask.CompletedTask;
+        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken)
+        {
+            return AuditRules.IsAudited(notice) ? Audited(AuditEventKind.TurnRefused) : ValueTask.CompletedTask;
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnTurnSupersededAsync(TurnSuperseded notice, CancellationToken cancellationToken) =>
-            Audited(AuditEventKind.TurnSuperseded);
+        public override ValueTask OnTurnSupersededAsync(TurnSuperseded notice, CancellationToken cancellationToken)
+        {
+            return Audited(AuditEventKind.TurnSuperseded);
+        }
 
         /// <inheritdoc />
-        public override ValueTask OnReplyCutAsync(ReplyCut notice, CancellationToken cancellationToken) =>
-            Audited(AuditEventKind.ReplyInterrupted);
+        public override ValueTask OnReplyCutAsync(ReplyCut notice, CancellationToken cancellationToken)
+        {
+            return Audited(AuditEventKind.ReplyInterrupted);
+        }
 
         /// <inheritdoc />
         public override ValueTask OnInputModeratedAsync(InputModerated notice, CancellationToken cancellationToken)
@@ -45,8 +55,10 @@ namespace AgentCore.Application.Hooks.BuiltIn
         }
 
         /// <inheritdoc />
-        public override ValueTask OnToolCalledAsync(ToolCalled notice, CancellationToken cancellationToken) =>
-            AuditRules.IsAudited(notice) ? Audited(AuditEventKind.ToolFailed) : ValueTask.CompletedTask;
+        public override ValueTask OnToolCalledAsync(ToolCalled notice, CancellationToken cancellationToken)
+        {
+            return AuditRules.IsAudited(notice) ? Audited(AuditEventKind.ToolFailed) : ValueTask.CompletedTask;
+        }
 
         /// <inheritdoc />
         public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken)

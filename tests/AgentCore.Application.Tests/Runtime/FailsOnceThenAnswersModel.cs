@@ -32,7 +32,10 @@ namespace AgentCore.Application.Tests.Runtime
             return updates.ToChatResponse();
         }
 
-        public object? GetService(Type serviceType, object? serviceKey = null) => null;
+        public object? GetService(Type serviceType, object? serviceKey = null)
+        {
+            return null;
+        }
 
         public void Dispose()
         {

@@ -37,7 +37,7 @@ namespace AgentCore.Application.Tests.Sessions
             FakeTimeProvider clock = new(DateTimeOffset.UtcNow);
             TaskCompletionSource[] gates = [new(), new()];
             TaskCompletionSource[] entered = [new(), new()];
-            CapturingChatClient reply = new(async i => { entered[i].TrySetResult(); await gates[i].Task; }, "a", "b");
+            CapturingChatClient reply = new(async i => { _ = entered[i].TrySetResult(); await gates[i].Task; }, "a", "b");
             using InMemoryConversationSessions sessions = new(
                 SingleEntrySessionFactories.Of(Factory(reply: reply, workspaceRoot: _root, timeProvider: clock)), IdleTimeout, clock);
             ConversationSession session = await sessions.GetOrOpenAsync(SingleEntrySessionFactories.MainEntry, "c1", null, Token);

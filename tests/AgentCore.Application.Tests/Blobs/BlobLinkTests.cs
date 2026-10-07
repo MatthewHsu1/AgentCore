@@ -33,10 +33,10 @@ namespace AgentCore.Application.Tests.Blobs
         }
 
         [Fact]
-        public void Lifetime_IsFifteenMinutes()
+        public void Lifetime_IsFiveMinutes()
         {
-            // Assert: decision 10 of the sandbox file capture spec.
-            Assert.Equal(TimeSpan.FromMinutes(15), BlobLink.Lifetime);
+            // Assert: the click-time file links spec.
+            Assert.Equal(TimeSpan.FromMinutes(5), BlobLink.Lifetime);
         }
     }
 }

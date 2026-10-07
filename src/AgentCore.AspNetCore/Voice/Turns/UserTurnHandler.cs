@@ -68,6 +68,7 @@ namespace AgentCore.AspNetCore.Voice.Turns
                 }
                 catch (OperationCanceledException)
                 {
+                    // A cancelled turn is still a finished one, and only its end is waited for.
                 }
             }
 

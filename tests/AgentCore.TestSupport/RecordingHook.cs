@@ -37,7 +37,10 @@ namespace AgentCore.TestSupport
             where T : HookNotice
         {
             TaskCompletionSource<HookNotice> seen = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            bool Matches(HookNotice notice) => notice is T typed && (match?.Invoke(typed) ?? true);
+            bool Matches(HookNotice notice)
+            {
+                return notice is T typed && (match?.Invoke(typed) ?? true);
+            }
 
             lock (_gate)
             {
@@ -52,35 +55,150 @@ namespace AgentCore.TestSupport
             return (T)await seen.Task.ConfigureAwait(false);
         }
 
-        public override ValueTask OnHostStartedAsync(HostStarted notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnHostStoppingAsync(HostStopping notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnRetentionSweptAsync(RetentionSwept notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnCallStartedAsync(CallStarted notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnLineSpokenAsync(LineSpoken notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnCallEndedAsync(CallEnded notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnConversationStartedAsync(ConversationStarted notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnConversationUnloadedAsync(ConversationUnloaded notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnConversationEndedAsync(ConversationEnded notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnTurnStartedAsync(TurnStarted notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnTurnSupersededAsync(TurnSuperseded notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnInputModeratedAsync(InputModerated notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnKnowledgeSearchedAsync(KnowledgeSearched notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnSkillLoadedAsync(SkillLoaded notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnCompactedAsync(Compacted notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnReplyUpdatedAsync(ReplyUpdated notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnModelCalledAsync(ModelCalled notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnToolCalledAsync(ToolCalled notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnApprovalChangedAsync(ApprovalChanged notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnFilePublishedAsync(FilePublished notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnSubagentStartedAsync(SubagentStarted notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnSubagentEndedAsync(SubagentEnded notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnReplyCutAsync(ReplyCut notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnVoiceStateChangedAsync(VoiceStateChanged notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnTurnLatencyAsync(TurnLatency notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnStageChangedAsync(StageChanged notice, CancellationToken cancellationToken) => Record(notice);
-        public override ValueTask OnFaultAsync(Fault notice, CancellationToken cancellationToken) => Record(notice);
+        public override ValueTask OnHostStartedAsync(HostStarted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnHostStoppingAsync(HostStopping notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnRetentionSweptAsync(RetentionSwept notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnCallStartedAsync(CallStarted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnLineSpokenAsync(LineSpoken notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnCallEndedAsync(CallEnded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnConversationStartedAsync(ConversationStarted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnConversationUnloadedAsync(ConversationUnloaded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnConversationEndedAsync(ConversationEnded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnTurnStartedAsync(TurnStarted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnTurnRefusedAsync(TurnRefused notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnTurnSupersededAsync(TurnSuperseded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnInputModeratedAsync(InputModerated notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnKnowledgeSearchedAsync(KnowledgeSearched notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnSkillLoadedAsync(SkillLoaded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnCompactedAsync(Compacted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnReplyUpdatedAsync(ReplyUpdated notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnModelCalledAsync(ModelCalled notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnToolCalledAsync(ToolCalled notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnApprovalChangedAsync(ApprovalChanged notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnFilePublishedAsync(FilePublished notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnSubagentStartedAsync(SubagentStarted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnSubagentEndedAsync(SubagentEnded notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnTurnCompletedAsync(TurnCompleted notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnReplyCutAsync(ReplyCut notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnVoiceStateChangedAsync(VoiceStateChanged notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnTurnLatencyAsync(TurnLatency notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnStageChangedAsync(StageChanged notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
+
+        public override ValueTask OnFaultAsync(Fault notice, CancellationToken cancellationToken)
+        {
+            return Record(notice);
+        }
 
         private ValueTask Record(HookNotice notice)
         {

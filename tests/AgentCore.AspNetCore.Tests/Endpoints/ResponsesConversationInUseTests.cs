@@ -5,7 +5,6 @@ using AgentCore.Application.Ports;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Endpoints;
 using AgentCore.AspNetCore.Tests.Fakes;
-using AgentCore.TestSupport;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 

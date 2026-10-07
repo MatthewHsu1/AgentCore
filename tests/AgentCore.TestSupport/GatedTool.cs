@@ -25,7 +25,10 @@ namespace AgentCore.TestSupport
 
         public int Finished => Volatile.Read(ref _finished);
 
-        public AIFunction Create(string name, string description) => AIFunctionFactory.Create(RunAsync, name, description);
+        public AIFunction Create(string name, string description)
+        {
+            return AIFunctionFactory.Create(RunAsync, name, description);
+        }
 
         private async Task<string> RunAsync(CancellationToken cancellationToken)
         {

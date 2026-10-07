@@ -195,7 +195,7 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
             }
 
             Assert.Equal(
-                new int?[] { 0, 1, 2 },
+                [0, 1, 2],
                 events.Where(item => item.Kind == AuditEventKind.TurnCompleted).Select(item => item.TurnIndex).Order());
 
             // The refusal leaves its own row, which is all that is left of it when its client has gone.

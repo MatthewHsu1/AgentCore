@@ -53,7 +53,7 @@ namespace AgentCore.Application.Runtime.Harness
                 try
                 {
                     long started = Stopwatch.GetTimestamp();
-                    
+
                     await provider.ReleaseSessionAsync(session, cancelRunning: true, ReleaseTimeout, cancellationToken)
                         .ConfigureAwait(false);
 

@@ -17,7 +17,6 @@ using AgentCore.Application.Tools.Builtin;
 using AgentCore.Application.Tools.Registry;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AgentCore.AspNetCore.Voice.Ports;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -36,7 +35,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
         private readonly List<object> _opened = [];
 
         private readonly Lock _gate = new();
-        
+
         private int _closed;
 
         private BootState? _state;
@@ -121,7 +120,11 @@ namespace AgentCore.AspNetCore.DependencyInjection
         private BootState Started { get => _state ?? throw NotStarted(); set => _state = value; }
 
         /// <summary>Gets the hooks, or <see langword="false"/> when the boot never finished: a stop after a failed boot.</summary>
-        internal bool TryGetHooks([NotNullWhen(true)] out HookRuntime? hooks) => (hooks = _state?.Hooks) is not null;
+        internal bool TryGetHooks([NotNullWhen(true)] out HookRuntime? hooks)
+        {
+            hooks = _state?.Hooks;
+            return hooks is not null;
+        }
 
         /// <summary>Takes ownership of one resource, and hands it straight back.</summary>
         /// <typeparam name="T">The resource's own type, so a caller loses nothing by owning it.</typeparam>

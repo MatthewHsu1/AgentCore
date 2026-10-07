@@ -1,6 +1,5 @@
 using AgentCore.Application.Configuration.Compilation;
 using AgentCore.Application.Configuration.Parsing;
-using AgentCore.Application.Configuration.Schema;
 using AgentCore.Application.Configuration.Validation;
 using AgentCore.Application.Conversation.Memory;
 using AgentCore.Domain;
@@ -145,7 +144,9 @@ namespace AgentCore.Application.Tests.Runtime
         private sealed class TextModel(string text) : IChatClient
         {
             public Task<ChatResponse> GetResponseAsync(IEnumerable<ChatMessage> messages, ChatOptions? options = null, CancellationToken cancellationToken = default)
-                => Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, text)));
+            {
+                return Task.FromResult(new ChatResponse(new ChatMessage(ChatRole.Assistant, text)));
+            }
 
             public async IAsyncEnumerable<ChatResponseUpdate> GetStreamingResponseAsync(
                 IEnumerable<ChatMessage> messages,
@@ -157,7 +158,10 @@ namespace AgentCore.Application.Tests.Runtime
                 yield return new ChatResponseUpdate(ChatRole.Assistant, text) { ResponseId = id, MessageId = id };
             }
 
-            public object? GetService(Type serviceType, object? serviceKey = null) => null;
+            public object? GetService(Type serviceType, object? serviceKey = null)
+            {
+                return null;
+            }
 
             public void Dispose()
             {

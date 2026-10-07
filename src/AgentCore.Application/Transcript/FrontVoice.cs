@@ -13,10 +13,15 @@ namespace AgentCore.Application.Transcript
         internal const string AuthorName = "front_voice";
 
         /// <summary>Builds one front-voice line.</summary>
-        internal static ChatMessage Line(string text) => new(ChatRole.Assistant, text) { AuthorName = AuthorName };
+        internal static ChatMessage Line(string text)
+        {
+            return new(ChatRole.Assistant, text) { AuthorName = AuthorName };
+        }
 
         /// <summary>Whether a message is the agent's own reply: an assistant message no front voice spoke.</summary>
-        internal static bool IsAgentReply(ChatMessage message) =>
-            message.Role == ChatRole.Assistant && !string.Equals(message.AuthorName, AuthorName, StringComparison.Ordinal);
+        internal static bool IsAgentReply(ChatMessage message)
+        {
+            return message.Role == ChatRole.Assistant && !string.Equals(message.AuthorName, AuthorName, StringComparison.Ordinal);
+        }
     }
 }

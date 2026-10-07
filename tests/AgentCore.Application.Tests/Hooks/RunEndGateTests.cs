@@ -259,16 +259,22 @@ namespace AgentCore.Application.Tests.Hooks
             Assert.Equal(4, notices.Of<ModelCalled>().Count);
         }
 
-        private static RequestRecordingChatClient Answers() => new("answer 1", "answer 2", "answer 3", "answer 4");
+        private static RequestRecordingChatClient Answers()
+        {
+            return new("answer 1", "answer 2", "answer 3", "answer 4");
+        }
 
         // Adds a todo on every run, so the todo list never empties and until: todos always asks for another run.
-        private static ToolCallingChatClient TodoAddingModel() => new(
+        private static ToolCallingChatClient TodoAddingModel()
+        {
+            return new(
             "added",
             new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["todos"] = new object[] { new Dictionary<string, object?>(StringComparer.Ordinal) { ["title"] = "T" } },
             },
             everyRun: true);
+        }
 
         /// <summary>Stamps a vendor property on every update, so each reply message carries a property bag of its own.</summary>
         private sealed class VendorPropertyChatClient(IChatClient inner) : DelegatingChatClient(inner)
@@ -297,10 +303,15 @@ namespace AgentCore.Application.Tests.Hooks
 
         private sealed class ClosedThrowingGate : AgentHook
         {
-            public override HookFailure FailureFor(GatePoint point) => HookFailure.Closed;
+            public override HookFailure FailureFor(GatePoint point)
+            {
+                return HookFailure.Closed;
+            }
 
-            public override ValueTask AfterRunAsync(RunEndGate gate, CancellationToken cancellationToken) =>
+            public override ValueTask AfterRunAsync(RunEndGate gate, CancellationToken cancellationToken)
+            {
                 throw new InvalidOperationException("broken");
+            }
         }
     }
 }

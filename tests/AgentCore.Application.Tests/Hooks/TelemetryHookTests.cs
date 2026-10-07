@@ -31,7 +31,7 @@ namespace AgentCore.Application.Tests.Hooks
         };
 
         [Theory]
-        [MemberData(nameof(FailedTurns))]
+        [MemberData(nameof(FailedTurns), DisableDiscoveryEnumeration = true)]
         public async Task AFailedTurnIsCountedUnderItsKind(TurnCompleted completed, string kind)
         {
             List<Reading> measured = await MeasureAsync(hook => hook.OnTurnCompletedAsync(completed, TestContext.Current.CancellationToken));
@@ -132,8 +132,10 @@ namespace AgentCore.Application.Tests.Hooks
             Assert.Contains((instrument, 0.25), readings);
         }
 
-        private static TurnCompleted Turn(TurnOutcome outcome, bool inTool) =>
-            new(Scope, outcome, "hi", "x", "", "", TimeSpan.Zero, outcome == TurnOutcome.Answered ? null : "why", inTool, null);
+        private static TurnCompleted Turn(TurnOutcome outcome, bool inTool)
+        {
+            return new(Scope, outcome, "hi", "x", "", "", TimeSpan.Zero, outcome == TurnOutcome.Answered ? null : "why", inTool, null);
+        }
 
         private static async Task<List<Reading>> MeasureAsync(Func<AgentHook, ValueTask> deliver)
         {

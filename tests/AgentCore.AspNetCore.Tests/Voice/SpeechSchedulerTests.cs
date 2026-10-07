@@ -116,7 +116,10 @@ namespace AgentCore.AspNetCore.Tests.Voice
         [Fact(Timeout = 30_000)]
         public async Task WaitForIdle_CompletesAtOnceWithNoSpeech()
         {
-            await _scheduler.WaitForIdleAsync(TestContext.Current.CancellationToken);
+            Task idle = _scheduler.WaitForIdleAsync(TestContext.Current.CancellationToken);
+
+            Assert.True(idle.IsCompletedSuccessfully);
+            await idle;
         }
 
         [Fact(Timeout = 30_000)]
@@ -201,11 +204,11 @@ namespace AgentCore.AspNetCore.Tests.Voice
             SpeechHandle playing = Schedule(SpeechPriority.Normal);
             await playing.WaitForAuthorizationAsync(TestContext.Current.CancellationToken);
 
-            // The loop clears the current speech under this lock, so it is still current here.
+            // The loop clears the current speech under this lock, so the loop still holds it here; done, it plays no more.
             lock (_sessionLock)
             {
                 playing.MarkDone();
-                Assert.Same(playing, _scheduler.CurrentSpeech);
+                Assert.Null(_scheduler.CurrentSpeech);
                 Assert.True(_scheduler.NoPendingSpeech);
             }
 

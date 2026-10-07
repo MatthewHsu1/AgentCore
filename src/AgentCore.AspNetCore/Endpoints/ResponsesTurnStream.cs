@@ -149,11 +149,10 @@ namespace AgentCore.AspNetCore.Endpoints
 
             if (dialect)
             {
-                // The enumeration above ends only after the run has finished, and the publish tool ran
-                // inside it: by here the bytes are in the store or never will be.
+                // The enumeration above ends only after the run has finished, so every file the turn published is noted.
                 Conversations conversations = http.RequestServices.GetRequiredService<Conversations>();
 
-                await foreach (TurnStreamPart part in files.ResolveAsync(conversations, turn.Conversation.ConversationId, cancellationToken).ConfigureAwait(false))
+                foreach (TurnStreamPart part in files.Resolve(conversations, turn.Conversation.ConversationId))
                 {
                     await WritePartLineAsync(http, part, cancellationToken).ConfigureAwait(false);
                 }
