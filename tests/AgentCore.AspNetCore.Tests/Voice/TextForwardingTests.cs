@@ -50,6 +50,20 @@ namespace AgentCore.AspNetCore.Tests.Voice
             Assert.Equal(["Once"], output.Spoken);
         }
 
+        // An interruption that lands once the source ran out cut nothing: every fragment reached the output.
+        [Fact(Timeout = 30_000)]
+        public async Task AnInterruptionAfterTheLastFragment_IsFull()
+        {
+            SpeechHandle handle = SpeechHandle.Create(_time, NullLogger.Instance);
+            FakeConversationOutput output = new();
+
+            TextForwardingResult result = await TextForwarding.ForwardAsync(
+                handle, output, InterruptedAfter(handle, "Once", " upon"), onFirstText: null, handle.TaskCancellationToken);
+
+            Assert.Equal(new TextForwardingResult("Once upon", TextPlayback.Full), result);
+            Assert.Equal(["Once", " upon"], output.Spoken);
+        }
+
         [Fact(Timeout = 30_000)]
         public async Task NothingForwarded_IsSkipped()
         {
@@ -87,6 +101,16 @@ namespace AgentCore.AspNetCore.Tests.Voice
             {
                 yield return text;
             }
+        }
+
+        private static async IAsyncEnumerable<string> InterruptedAfter(SpeechHandle handle, params string[] texts)
+        {
+            foreach (string text in texts)
+            {
+                yield return text;
+            }
+
+            _ = handle.Interrupt();
         }
 
         private static async IAsyncEnumerable<string> InterruptedBetween(SpeechHandle handle, string first, string second)

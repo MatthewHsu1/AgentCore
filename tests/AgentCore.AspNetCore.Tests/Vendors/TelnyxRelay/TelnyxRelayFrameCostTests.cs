@@ -84,12 +84,18 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Lock gate = new();
             int measurements = 0;
             int instruments = 0;
+            TaskCompletionSource conversationAudited = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            void RecordMeasurement()
+            void RecordMeasurement(Instrument instrument, ReadOnlySpan<KeyValuePair<string, object?>> tags)
             {
                 lock (gate)
                 {
                     measurements++;
+                }
+
+                if (instrument.Name == "agentcore.audit.events" && tags.ToArray().Any(tag => Equals(tag.Value, "conversation.started")))
+                {
+                    _ = conversationAudited.TrySetResult();
                 }
             }
 
@@ -115,13 +121,13 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             // Every numeric type an instrument may carry, not only the double of the turn histogram and
             // the long of the three counters. A per-frame instrument somebody adds later is counted
             // here whatever its type, rather than slipping past an incomplete set of callbacks.
-            listener.SetMeasurementEventCallback<byte>((_, _, _, _) => RecordMeasurement());
-            listener.SetMeasurementEventCallback<short>((_, _, _, _) => RecordMeasurement());
-            listener.SetMeasurementEventCallback<int>((_, _, _, _) => RecordMeasurement());
-            listener.SetMeasurementEventCallback<long>((_, _, _, _) => RecordMeasurement());
-            listener.SetMeasurementEventCallback<float>((_, _, _, _) => RecordMeasurement());
-            listener.SetMeasurementEventCallback<double>((_, _, _, _) => RecordMeasurement());
-            listener.SetMeasurementEventCallback<decimal>((_, _, _, _) => RecordMeasurement());
+            listener.SetMeasurementEventCallback<byte>((instrument, _, tags, _) => RecordMeasurement(instrument, tags));
+            listener.SetMeasurementEventCallback<short>((instrument, _, tags, _) => RecordMeasurement(instrument, tags));
+            listener.SetMeasurementEventCallback<int>((instrument, _, tags, _) => RecordMeasurement(instrument, tags));
+            listener.SetMeasurementEventCallback<long>((instrument, _, tags, _) => RecordMeasurement(instrument, tags));
+            listener.SetMeasurementEventCallback<float>((instrument, _, tags, _) => RecordMeasurement(instrument, tags));
+            listener.SetMeasurementEventCallback<double>((instrument, _, tags, _) => RecordMeasurement(instrument, tags));
+            listener.SetMeasurementEventCallback<decimal>((instrument, _, tags, _) => RecordMeasurement(instrument, tags));
             listener.Start();
 
             RecordCountingLoggerProvider records = new();
@@ -166,10 +172,14 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
                 try
                 {
                     await sentinel.Observed.WaitAsync(bounded.Token);
+
+                    // The conversation's own audit event is written off the read loop, so it can land before or after
+                    // the sentinel. It is waited for too, so both runs count it.
+                    await conversationAudited.Task.WaitAsync(bounded.Token);
                 }
                 catch (OperationCanceledException) when (deadline.IsCancellationRequested)
                 {
-                    Assert.Fail($"the connection never read past the {frames} interim prompts within twenty seconds.");
+                    Assert.Fail($"the connection never read past the {frames} interim prompts, or never audited its start, within twenty seconds.");
                 }
 
                 // Counted here, with the conversation still up, rather than after the socket and the host are

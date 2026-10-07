@@ -12,10 +12,10 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
         /// <summary>Nothing was ever forwarded.</summary>
         Skipped,
 
-        /// <summary>Some text reached the output before the speech was interrupted.</summary>
+        /// <summary>Some text reached the output before the speech was interrupted, and the rest never did.</summary>
         Partial,
 
-        /// <summary>Every fragment reached the output and the speech was not interrupted.</summary>
+        /// <summary>Every fragment reached the output; an interruption, if any, came after the last one.</summary>
         Full,
     }
 }

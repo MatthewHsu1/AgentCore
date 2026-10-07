@@ -69,7 +69,16 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
                     return;
                 }
 
-                await ForwardStepAsync(cancellationToken).ConfigureAwait(false);
+                TextPlayback? played = await ForwardStepAsync(cancellationToken).ConfigureAwait(false);
+
+                // Every word is out and the engine turn is over, so an interruption from here on cuts nothing: the
+                // reply ends as a whole one does, and the transport's report settles its line.
+                bool spokeWhole = played == TextPlayback.Full && stream.Ended;
+                if (spokeWhole)
+                {
+                    Hearing.MarkSpokenWhole();
+                }
+
                 bool hasTools = !speechHandle.IsInterrupted
                     && stream.TryPeek(out ReplyEvent next)
                     && next.Kind == ReplyEventKind.ToolCall;
@@ -83,16 +92,27 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
                     session.SetAgentState(AgentState.Listening);
                 }
 
+                if (speechHandle.IsInterrupted && !spokeWhole)
+                {
+                    bool started = await SettleCutAsync(cancellationToken).ConfigureAwait(false);
+
+                    speechHandle.MarkGenerationDone();
+
+                    await WaitForCutTurnAsync(started, cancellationToken).ConfigureAwait(false);
+
+                    return;
+                }
+
                 speechHandle.MarkGenerationDone();
 
-                if (speechHandle.IsInterrupted)
+                if (speechHandle.IsInterrupted && !spokeWhole)
                 {
                     await EndInterruptedAsync(cancellationToken).ConfigureAwait(false);
                     return;
                 }
 
                 bool roundDone = hasTools && await WaitForToolsAsync(cancellationToken).ConfigureAwait(false);
-                if (speechHandle.IsInterrupted)
+                if (speechHandle.IsInterrupted && !spokeWhole)
                 {
                     await EndInterruptedAsync(cancellationToken).ConfigureAwait(false);
                     return;
@@ -109,7 +129,8 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             }
         }
 
-        private async Task ForwardStepAsync(CancellationToken cancellationToken)
+        /// <returns>How the step's text reached the output, or <see langword="null"/> when no text was forwarded.</returns>
+        private async Task<TextPlayback?> ForwardStepAsync(CancellationToken cancellationToken)
         {
             Task<bool> ready = stream.WaitToReadAsync(cancellationToken).AsTask();
             await speechHandle.WaitIfNotInterruptedAsync([ready]).ConfigureAwait(false);
@@ -120,7 +141,7 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
                 || !stream.TryPeek(out ReplyEvent first)
                 || first.Kind != ReplyEventKind.Text)
             {
-                return;
+                return null;
             }
 
             TextForwardingResult forwarded = await TextForwarding.ForwardAsync(
@@ -135,13 +156,18 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             {
                 metrics.MarkSpeechEnded();
             }
+
+            return forwarded.Playback;
         }
 
         private void OnFirstText()
         {
             Hearing.MarkFirstText();
+
             onFirstText(this);
+
             session.SetAgentState(AgentState.Speaking);
+
             metrics.MarkFirstSpeech();
         }
 
@@ -166,7 +192,9 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             }
 
             session.Scheduler.AddBackgroundSpeech(speechHandle);
+
             using CancellationTokenSource roundCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
             Task<bool> round = stream.WaitForRoundAsync(OnToolEvent, roundCancellation.Token);
             try
             {
@@ -177,8 +205,11 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             {
                 // The round reader stops before the scopes close, so it opens none behind this cleanup.
                 await TaskTeardown.CancelAndWaitAsync(roundCancellation, [round]).ConfigureAwait(false);
+
                 session.Scheduler.RemoveBackgroundSpeech(speechHandle);
+
                 closing.AddRange(scopes.Values.Select(scope => scope.DisposeAsync().AsTask()));
+
                 await Task.WhenAll(closing).ConfigureAwait(false);
             }
         }
@@ -202,9 +233,23 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
 
         private async Task EndInterruptedAsync(CancellationToken cancellationToken)
         {
+            bool started = await SettleCutAsync(cancellationToken).ConfigureAwait(false);
+
+            await WaitForCutTurnAsync(started, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <returns><see langword="true"/> when the reply's engine turn has started, so its end is worth waiting for.</returns>
+        private async Task<bool> SettleCutAsync(CancellationToken cancellationToken)
+        {
             bool started = Hearing.CutInterrupted();
+
             await Hearing.RecutToReportAsync(cancellationToken).ConfigureAwait(false);
 
+            return started;
+        }
+
+        private async Task WaitForCutTurnAsync(bool started, CancellationToken cancellationToken)
+        {
             // A turn still waiting on the one before it takes the cut when it starts, and nothing here waits for it.
             if (!started)
             {

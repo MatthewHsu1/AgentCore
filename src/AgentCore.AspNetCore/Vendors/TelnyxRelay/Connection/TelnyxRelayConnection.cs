@@ -85,7 +85,8 @@ namespace AgentCore.AspNetCore.Vendors.TelnyxRelay.Connection
                     frameType => TelnyxRelayLog.FrameBodyRefused(_logger, frameType, ConversationIdForLog),
                     () => TelnyxRelayLog.IdleTimeoutReached(_logger, ConversationIdForLog)),
                 timeProvider,
-                connectionToken);
+                connectionToken,
+                http.RequestAborted);
 
             _sender = new JsonWebSocketSender(socket, _options.CloseTimeout, connectionToken);
 

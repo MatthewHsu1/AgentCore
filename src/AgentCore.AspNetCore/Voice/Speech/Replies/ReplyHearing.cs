@@ -48,6 +48,8 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
 
         private bool _cutSettled;
 
+        private bool _spokeWhole;
+
         private int _reportWaitStarted;
 
         /// <summary>Gets whether the reply has handed any text to the output yet.</summary>
@@ -83,12 +85,42 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             }
         }
 
-        /// <summary>Marks the interruption about to land as a final prompt's, which the transport's report may follow.</summary>
+        /// <summary>
+        /// Marks the interruption about to land as a final prompt's, which the transport's report may follow. A reply
+        /// spoken whole loses nothing to it, so it waits for no report on that account.
+        /// </summary>
         public void ExpectBarge()
         {
             lock (_gate)
             {
-                _expectsBarge = true;
+                _expectsBarge = !_spokeWhole;
+            }
+        }
+
+        /// <summary>
+        /// Marks every word of the reply forwarded and its engine turn over. An interruption from here on cuts nothing,
+        /// so the transport's report settles the line as it does for a reply already done.
+        /// </summary>
+        public void MarkSpokenWhole()
+        {
+            (string HeardText, TimeSpan PlayedDuration)? kept = null;
+            lock (_gate)
+            {
+                _spokeWhole = true;
+
+                // A final prompt's interruption landed after the last word and kept a report for a recut that will not run.
+                if (_expectsBarge && _cutText is null)
+                {
+                    kept = _barge;
+                    _barge = null;
+                }
+
+                _expectsBarge = false;
+            }
+
+            if (kept is { } heard)
+            {
+                _ = CutHeard(heard.HeardText, heard.PlayedDuration);
             }
         }
 
@@ -165,13 +197,20 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
 
         /// <summary>
         /// Marks the reply's speech done: its text is with the transport, which may still be playing it. An interrupted
-        /// reply settled its cut before its speech was done, so its barge window closes too.
+        /// reply settled its cut before its speech was done, so its barge window closes too, unless it was spoken whole
+        /// and nothing cut it.
         /// </summary>
         /// <param name="interrupted">Whether the speech was interrupted.</param>
         public void MarkSpoken(bool interrupted)
         {
+            bool settled;
+            lock (_gate)
+            {
+                settled = interrupted && (!_spokeWhole || _cutText is not null);
+            }
+
             _ = _spoken.TrySetResult();
-            if (interrupted)
+            if (settled)
             {
                 CloseBargeWindow();
             }
@@ -215,6 +254,7 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
         public async Task<string> HeardWhenSettledAsync()
         {
             await Task.WhenAll(_spoken.Task, _bargeWindowClosed.Task).ConfigureAwait(false);
+
             return HeardText;
         }
 
@@ -226,10 +266,13 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             lock (_gate)
             {
                 bool forwardedText = _forwardedText;
+
                 _cutSettled = !forwardedText || _barge is not null;
+
                 cut = !forwardedText
                     ? NothingHeard
                     : _barge is { } heard ? Heard(heard.HeardText, heard.PlayedDuration) : new TurnCut(_forwarded, Played: null);
+
                 _cutText = cut.ShownText;
             }
 
@@ -254,7 +297,9 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
                 }
 
                 _cutSettled = true;
+
                 cut = Heard(heard.HeardText, heard.PlayedDuration);
+
                 _cutText = cut.ShownText;
             }
 

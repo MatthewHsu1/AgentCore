@@ -1,3 +1,4 @@
+using System.Net.WebSockets;
 using AgentCore.Application.Hooks.Notices;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.Tests.Fakes;
@@ -169,6 +170,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             await ReplySentAsync(hook);
             ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
             await relay.SendAsync(RelayFrames.Prompt("okay bye", last: true));
+            await relay.HangUpAsync();
             await relay.DisposeAsync();
             _ = await hook.WaitForAsync<ConversationUnloaded>().WaitAsync(Bound, TestContext.Current.CancellationToken);
 
@@ -177,6 +179,26 @@ namespace AgentCore.AspNetCore.Tests.Vendors.TelnyxRelay
             Assert.Equal([(Speaker.Caller, "hi"), (Speaker.Agent, "goodbye then"), (Speaker.Caller, "okay bye")], Lines(hook));
             Assert.Equal(turn.Scope.TurnIndex, line.Scope.TurnIndex);
             Assert.Equal(ConversationEndReason.AgentCompleted, ended.Reason);
+        }
+
+        // A caller can say their last words and drop the line at once. The drop can reach the request before the
+        // read loop takes those words off the socket, and they are still a line.
+        [Fact(Timeout = 30_000)]
+        public async Task WordsTheCallerSentBeforeTheLineDroppedAreStillALine()
+        {
+            RecordingHook hook = new();
+            using FragmentingChatClient reply = new("hello");
+            await using RelayConnectionHarness harness = await RelayConnectionHarness.StartAsync(
+                TelnyxRelayTurnTests.PolicyYaml, reply, configure: options => _ = options.UseHooks(hook));
+
+            harness.Socket.Queue(RelayFrames.Setup());
+            _ = await hook.WaitForAsync<CallStarted>().WaitAsync(Bound, TestContext.Current.CancellationToken);
+            harness.DropPeer();
+            harness.Socket.Queue(RelayFrames.Prompt("bye", last: true));
+            harness.Socket.FailReceive(new WebSocketException(WebSocketError.ConnectionClosedPrematurely));
+
+            LineSpoken line = await hook.WaitForAsync<LineSpoken>(line => line.Text == "bye").WaitAsync(Bound, TestContext.Current.CancellationToken);
+            Assert.Equal(Speaker.Caller, line.Speaker);
         }
 
         // The reply's end latency is read as its last step ends, after every word went to the relay.

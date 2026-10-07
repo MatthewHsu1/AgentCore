@@ -47,7 +47,7 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             // Before the task starts, so a barge-in's StopAsync also cuts off a fragment that already passed the
             // IsInterrupted check below and is still on its way to the output.
             output.BeginReply();
-            Task forwardTask = ForwardTextAsync(speechHandle, output, source, text, onFirstText, forwardCancellation.Token, cancellationToken);
+            Task<bool> forwardTask = ForwardTextAsync(speechHandle, output, source, text, onFirstText, forwardCancellation.Token, cancellationToken);
             await speechHandle.WaitIfNotInterruptedAsync([forwardTask]).ConfigureAwait(false);
 
             if (speechHandle.IsInterrupted)
@@ -55,14 +55,22 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
                 await TaskTeardown.CancelAndWaitAsync(forwardCancellation, [forwardTask]).ConfigureAwait(false);
             }
 
+            // Whole once the source ran out, even when an interruption landed after its last fragment: it cut nothing.
+            bool whole = !speechHandle.IsInterrupted || (forwardTask.IsCompletedSuccessfully && forwardTask.Result);
             string forwarded = text.ToString();
-            TextPlayback playback = forwarded.Length == 0
-                ? TextPlayback.Skipped
-                : speechHandle.IsInterrupted ? TextPlayback.Partial : TextPlayback.Full;
+
+            TextPlayback playback = (forwarded.Length, whole) switch
+            {
+                (0, _) => TextPlayback.Skipped,
+                (_, true) => TextPlayback.Full,
+                _ => TextPlayback.Partial,
+            };
+            
             return new TextForwardingResult(forwarded, playback);
         }
 
-        private static async Task ForwardTextAsync(
+        /// <returns><see langword="true"/> once the source ran out; <see langword="false"/> when an interruption stopped it first.</returns>
+        private static async Task<bool> ForwardTextAsync(
             SpeechHandle speechHandle,
             IConversationOutputPort output,
             IAsyncEnumerable<string> source,
@@ -80,7 +88,7 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
                     // another thread, and a delta read before the cancellation arrives must not be spoken.
                     if (speechHandle.IsInterrupted)
                     {
-                        break;
+                        return false;
                     }
 
                     _ = text.Append(delta);
@@ -98,6 +106,8 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
                         await output.SpeakAsync(delta, forwardCancellationToken).ConfigureAwait(false);
                     }
                 }
+
+                return true;
             }
             finally
             {

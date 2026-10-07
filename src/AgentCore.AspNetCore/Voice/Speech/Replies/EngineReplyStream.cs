@@ -152,6 +152,9 @@ namespace AgentCore.AspNetCore.Voice.Speech.Replies
             return _events.Reader.TryPeek(out next);
         }
 
+        /// <summary>Gets whether the turn has ended and every event was read.</summary>
+        public bool Ended => _events.Reader.Completion.IsCompleted;
+
         /// <summary>Yields the current step's text, and stops before the step's first tool call or at the turn's end.</summary>
         /// <param name="cancellationToken">Stops the enumeration.</param>
         public async IAsyncEnumerable<string> ReadStepTextAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
