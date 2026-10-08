@@ -96,8 +96,7 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             _ = await running.Sideband.WaitForSentAsync(IsPlan);
             _ = running.Call.Session.Send(new SetVoicePlanCommand(Third));
             socket.SetResult();
-            _ = await running.Sideband.WaitForSentAsync(IsGreeting);
-            await running.Sideband.WaitForDrainAsync();
+            _ = await running.Sideband.WaitForSentAsync(sent => IsPlan(sent) && ((string?)sent["content"])!.StartsWith("Plan 3.", StringComparison.Ordinal));
 
             Assert.Equal(
                 [
