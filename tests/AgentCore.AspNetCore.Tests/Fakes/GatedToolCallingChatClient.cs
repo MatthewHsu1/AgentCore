@@ -2,9 +2,11 @@ using Microsoft.Extensions.AI;
 
 namespace AgentCore.AspNetCore.Tests.Fakes
 {
-    /// <summary>Calls the first tool it is offered, once, then answers in words.</summary>
-    internal sealed class GatedToolCallingChatClient : IChatClient
+    /// <summary>Calls the first tool it is offered, once, with <paramref name="arguments"/>, then answers in words.</summary>
+    internal sealed class GatedToolCallingChatClient(IReadOnlyDictionary<string, object?>? arguments = null) : IChatClient
     {
+        private static readonly Dictionary<string, object?> DefaultArguments = new(StringComparer.Ordinal) { ["to"] = "a@b.com" };
+
         private int _requests;
 
         /// <summary>Gets a task that completes once a second request reached the model.</summary>
@@ -31,7 +33,7 @@ namespace AgentCore.AspNetCore.Tests.Fakes
                     [new FunctionCallContent(
                           "conversation_1",
                           tool.Name,
-                          new Dictionary<string, object?>(StringComparer.Ordinal) { ["to"] = "a@b.com" })]);
+                          new Dictionary<string, object?>(arguments ?? DefaultArguments, StringComparer.Ordinal))]);
                 yield break;
             }
 

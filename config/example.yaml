@@ -197,6 +197,10 @@ tools:
   # deliverable: the file is copied into providers.blobs.
   - { id: publish, kind: builtin, uses: file.publish }
 
+  # kind: builtin, a plain function for a GPT-Live call. The model sets the plan the voice runs between its
+  # answers; a new plan replaces the last. On any other channel it answers that there is no separate voice.
+  - { id: plan, kind: builtin, uses: voice.plan }
+
   # kind: binding, typed form. Not used in this example. The host registered
   #   options.Bind("CloseCase", (string caseId, string reason) => ...)
   # The method parameters ARE the schema, so write no parameters: here. Writing one is a boot

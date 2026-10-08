@@ -94,6 +94,7 @@ namespace AgentCore.Application.Tests.Configuration
               required: [ summary ]
           - { id: search, kind: builtin, uses: web.search }
           - { id: publish, kind: builtin, uses: file.publish }
+          - { id: plan, kind: builtin, uses: voice.plan }
         agents:
           defaults:
             model: { ref: reply, temperature: 0.3 }

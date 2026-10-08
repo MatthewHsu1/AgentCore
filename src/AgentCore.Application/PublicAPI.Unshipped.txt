@@ -3181,3 +3181,16 @@ AgentCore.Application.Conversation.StoredConversation.StoredConversation(AgentCo
 AgentCore.Application.Ports.IConversations.LinkFileAsync(string! conversationId, string! name, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Uri?>
 AgentCore.Application.Blobs.BlobOwner
 static AgentCore.Application.Blobs.BlobOwner.IsSafe(string? ownerId) -> bool
+AgentCore.Application.Conversation.Commands.SetVoicePlanCommand
+AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.SetVoicePlanCommand(string! text) -> void
+AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.Equals(AgentCore.Application.Conversation.Commands.SetVoicePlanCommand? other) -> bool
+AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.Text.get -> string!
+override AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.<Clone>$() -> AgentCore.Application.Conversation.Commands.SetVoicePlanCommand!
+override AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.Equals(object? obj) -> bool
+override AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.GetHashCode() -> int
+override AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.ToString() -> string!
+override sealed AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.Equals(AgentCore.Application.Conversation.Commands.ChannelCommand? other) -> bool
+static AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.operator ==(AgentCore.Application.Conversation.Commands.SetVoicePlanCommand? left, AgentCore.Application.Conversation.Commands.SetVoicePlanCommand? right) -> bool
+static AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.operator !=(AgentCore.Application.Conversation.Commands.SetVoicePlanCommand? left, AgentCore.Application.Conversation.Commands.SetVoicePlanCommand? right) -> bool
+const AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.MaxLength = 1000 -> int
+const AgentCore.Application.Tools.Builtin.BuiltinToolNames.VoicePlan = "voice.plan" -> string!
