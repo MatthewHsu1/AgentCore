@@ -16,6 +16,7 @@ namespace AgentCore.Application.Tools.Builtin
             {
                 new WebSearchToolDefinition(),
                 new FilePublishToolDefinition(),
+                new VoicePlanToolDefinition(),
             }.ToDictionary(definition => definition.Name, StringComparer.Ordinal);
 
         private readonly BuiltinToolPorts _ports;

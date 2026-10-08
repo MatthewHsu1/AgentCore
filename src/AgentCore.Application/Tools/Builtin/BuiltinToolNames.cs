@@ -8,5 +8,8 @@ namespace AgentCore.Application.Tools.Builtin
 
         /// <summary>Hands one file from the conversation's workspace to the person, through the blob store.</summary>
         public const string FilePublish = "file.publish";
+
+        /// <summary>Sets the plan a voice that speaks for itself runs between answers, such as GPT-Live's.</summary>
+        public const string VoicePlan = "voice.plan";
     }
 }

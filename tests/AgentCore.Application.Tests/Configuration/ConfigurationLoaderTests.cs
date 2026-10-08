@@ -70,7 +70,7 @@ namespace AgentCore.Application.Tests.Configuration
         [Fact]
         public void Example_BindsEveryToolKind()
         {
-            Assert.Equal(4, Example.Tools.Count);
+            Assert.Equal(5, Example.Tools.Count);
 
             ToolConfiguration binding = Example.Tools[1];
             Assert.Equal(ToolKind.Binding, binding.Kind);
@@ -83,6 +83,9 @@ namespace AgentCore.Application.Tests.Configuration
 
             Assert.Equal(ToolKind.Builtin, Example.Tools[3].Kind);
             Assert.Equal("file.publish", Example.Tools[3].Uses);
+
+            Assert.Equal(ToolKind.Builtin, Example.Tools[4].Kind);
+            Assert.Equal("voice.plan", Example.Tools[4].Uses);
         }
 
         [Fact]

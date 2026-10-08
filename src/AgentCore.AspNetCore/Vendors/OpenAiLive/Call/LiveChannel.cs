@@ -9,13 +9,19 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
     /// can send a command from that notice on. A transfer is the <see cref="LiveTransfer"/>'s, once the call runs. Voice
     /// context goes out as silent context at once, which in a probe never made the voice speak or cut its speech
     /// (docs/probes/live-late-brief); context sent before <c>session.started</c> waits for it, as OpenAI's guide sends
-    /// nothing before it.
+    /// nothing before it. A plan goes out the same way, numbered, so a newer plan replaces the older ones.
     /// </summary>
     internal sealed class LiveChannel(string callId, ILogger logger) : IConversationChannel
     {
         private readonly Lock _gate = new();
 
         private readonly List<string> _waiting = [];
+
+        private int _plans;
+
+        // The last send in line. Each send waits for the one before it, so context and plans reach GPT-Live in the
+        // order they were numbered and queued, even when one is sent while earlier ones are still going out.
+        private Task _lastSend = Task.CompletedTask;
 
         private LiveTransfer? _transfer;
 
@@ -29,7 +35,8 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
             return command switch
             {
                 TransferCommand transfer => Volatile.Read(ref _transfer)?.Send(transfer) ?? ChannelCommandResult.NotSupported,
-                AddVoiceContextCommand context => Add(context.Text),
+                AddVoiceContextCommand context => Add(context.Text, numbered: false),
+                SetVoicePlanCommand plan => Add(plan.Text, numbered: true),
                 _ => ChannelCommandResult.NotSupported,
             };
         }
@@ -45,36 +52,83 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
         /// <param name="cancellationToken">The call's token. Later context goes out under it too.</param>
         internal async ValueTask OpenAsync(Func<string, CancellationToken, ValueTask> tell, CancellationToken cancellationToken)
         {
-            string[] waiting;
+            List<(string Text, Task Previous, TaskCompletionSource Done)> waiting = [];
+
             lock (_gate)
             {
                 _stopping = cancellationToken;
+
                 _tell = tell;
-                waiting = [.. _waiting];
+
+                foreach (string text in _waiting)
+                {
+                    (Task previous, TaskCompletionSource done) = TakePlaceInLine();
+                    waiting.Add((text, previous, done));
+                }
+
                 _waiting.Clear();
             }
 
-            foreach (string text in waiting)
-            {
-                await tell(text, cancellationToken).ConfigureAwait(false);
-            }
+            await Task.WhenAll(waiting.Select(item => SendInTurnAsync(item.Previous, item.Done, () => tell(item.Text, cancellationToken).AsTask())))
+                .ConfigureAwait(false);
         }
 
-        private ChannelCommandResult Add(string text)
+        private ChannelCommandResult Add(string text, bool numbered)
         {
             Func<string, CancellationToken, ValueTask>? tell;
+
+            Task previous;
+
+            TaskCompletionSource done;
+
             lock (_gate)
             {
+                if (numbered)
+                {
+                    // GPT-Live cannot delete an append; this line is what makes a newer plan replace the older ones.
+                    text = $"Plan {++_plans}. This replaces every earlier plan.\n{text}";
+                }
+
                 tell = _tell;
+
                 if (tell is null)
                 {
                     _waiting.Add(text);
                     return ChannelCommandResult.Scheduled;
                 }
+
+                (previous, done) = TakePlaceInLine();
             }
 
-            _ = TellAsync(tell, text);
+            _ = SendInTurnAsync(previous, done, () => TellAsync(tell, text));
+
             return ChannelCommandResult.Scheduled;
+        }
+
+        // Call under _gate. The send itself runs outside the lock.
+        private (Task Previous, TaskCompletionSource Done) TakePlaceInLine()
+        {
+            TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            Task previous = _lastSend;
+
+            _lastSend = done.Task;
+
+            return (previous, done);
+        }
+
+        // A place in line only ever completes, never faults, so a failed send never stops the ones after it.
+        private static async Task SendInTurnAsync(Task previous, TaskCompletionSource done, Func<Task> send)
+        {
+            try
+            {
+                await previous.ConfigureAwait(false);
+                await send().ConfigureAwait(false);
+            }
+            finally
+            {
+                done.SetResult();
+            }
         }
 
         private async Task TellAsync(Func<string, CancellationToken, ValueTask> tell, string text)

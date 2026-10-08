@@ -222,6 +222,11 @@ namespace AgentCore.Application.Tests.Configuration
               "id": "publish",
               "kind": "builtin",
               "uses": "file.publish"
+            },
+            {
+              "id": "plan",
+              "kind": "builtin",
+              "uses": "voice.plan"
             }
           ],
         """;

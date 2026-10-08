@@ -180,6 +180,27 @@ namespace AgentCore.Application.Tests.Tools
         }
 
         [Fact]
+        public async Task Publish_NoPathArgument_IsRefusedWithItsOwnToolErrorNotAThrow()
+        {
+            AIFunction function = (AIFunction)Build();
+            AIFunctionArguments arguments = new();
+            _ = new TurnInvocation
+            {
+                ConversationId = "conversation-1",
+                TurnIndex = 0,
+                Stage = string.Empty,
+                Workspace = Path.Combine(_root, "conversation-1"),
+                OuterCallId = "tc_1",
+            }.FileIn(arguments);
+
+            JsonObject result = Assert.IsType<JsonObject>(
+                ToolResultJson.ToNode(await function.InvokeAsync(arguments, TestContext.Current.CancellationToken)));
+
+            Assert.True(ToolErrorResult.IsError(result));
+            Assert.Equal("path is required: the file's path, relative to the workspace.", result["message"]!.GetValue<string>());
+        }
+
+        [Fact]
         public async Task Publish_OutsideAnyTurn_IsRefusedWithAToolError()
         {
             File.WriteAllText(Path.Combine(_root, "conversation-1", "rows.csv"), "a");
