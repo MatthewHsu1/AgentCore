@@ -5,11 +5,12 @@ namespace AgentCore.Application.Tests.Hooks
 {
     public sealed class GatePointTests
     {
-        // Deadline and default failure F of each of the 13 gates.
+        // Deadline and default failure F of each of the 14 gates.
         public static TheoryData<GatePoint, double, HookFailure> Points => new()
         {
             { GatePoint.BeforeCall, 5, HookFailure.Closed },
             { GatePoint.BeforeEntry, 2, HookFailure.Closed },
+            { GatePoint.BeforeConversation, 2, HookFailure.Closed },
             { GatePoint.BeforeTurn, 2, HookFailure.Open },
             { GatePoint.BeforeRun, 2, HookFailure.Open },
             { GatePoint.BeforeCompaction, 5, HookFailure.Open },
@@ -32,10 +33,10 @@ namespace AgentCore.Application.Tests.Hooks
         }
 
         [Fact]
-        public void TheSetHoldsThirteenPoints()
+        public void TheSetHoldsFourteenPoints()
         {
-            Assert.Equal(13, GatePoint.All.Count);
-            Assert.Equal(13, GatePoint.All.Select(point => point.Name).Distinct(StringComparer.Ordinal).Count());
+            Assert.Equal(14, GatePoint.All.Count);
+            Assert.Equal(14, GatePoint.All.Select(point => point.Name).Distinct(StringComparer.Ordinal).Count());
         }
 
         [Fact]

@@ -1,7 +1,7 @@
 namespace AgentCore.Application.Hooks
 {
     /// <summary>
-    /// One of the 13 points where AgentCore awaits its hooks. The point, not the hook, fixes the deadline and the
+    /// One of the 14 points where AgentCore awaits its hooks. The point, not the hook, fixes the deadline and the
     /// default failure policy.
     /// </summary>
     public sealed class GatePoint
@@ -19,6 +19,9 @@ namespace AgentCore.Application.Hooks
 
         /// <summary>Gets the gate where a request needs an entry. Fails closed: the request is refused.</summary>
         public static GatePoint BeforeEntry { get; } = new(nameof(BeforeEntry), TimeSpan.FromSeconds(2), HookFailure.Closed);
+
+        /// <summary>Gets the gate where a request names a conversation. Fails closed: the request is refused.</summary>
+        public static GatePoint BeforeConversation { get; } = new(nameof(BeforeConversation), TimeSpan.FromSeconds(2), HookFailure.Closed);
 
         /// <summary>Gets the gate where the user's message arrives, before moderation and the model.</summary>
         public static GatePoint BeforeTurn { get; } = new(nameof(BeforeTurn), TimeSpan.FromSeconds(2), HookFailure.Open);
@@ -56,7 +59,7 @@ namespace AgentCore.Application.Hooks
         /// <summary>Gets every gate point, in gate order.</summary>
         public static IReadOnlyList<GatePoint> All { get; } =
         [
-            BeforeCall, BeforeEntry, BeforeTurn, BeforeRun, BeforeCompaction, BeforeModel, AfterModel,
+            BeforeCall, BeforeEntry, BeforeConversation, BeforeTurn, BeforeRun, BeforeCompaction, BeforeModel, AfterModel,
             AfterModelFailed, BeforeToolApproval, BeforeTool, AfterTool, AfterToolFailed, AfterRun,
         ];
 

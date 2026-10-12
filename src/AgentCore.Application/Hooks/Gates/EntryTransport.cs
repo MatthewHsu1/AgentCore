@@ -8,5 +8,8 @@ namespace AgentCore.Application.Hooks.Gates
 
         /// <summary>A phone call.</summary>
         Call,
+
+        /// <summary>An HTTP request on the AG-UI route.</summary>
+        AgUi,
     }
 }

@@ -26,6 +26,15 @@ namespace AgentCore.Application.Hooks
             return default;
         }
 
+        /// <summary>A request names a conversation, before AgentCore opens it or runs a turn on it. Refuse with <see cref="ConversationGate.Refuse"/>.</summary>
+        /// <param name="gate">The facts and the verbs of this gate.</param>
+        /// <param name="cancellationToken">Cancelled at the gate's deadline.</param>
+        /// <returns>A task that completes when the hook decided.</returns>
+        public virtual ValueTask BeforeConversationAsync(ConversationGate gate, CancellationToken cancellationToken)
+        {
+            return default;
+        }
+
         /// <summary>The user's message arrives, before moderation and the model.</summary>
         /// <param name="gate">The facts and the verbs of this gate.</param>
         /// <param name="cancellationToken">Cancelled at the gate's deadline.</param>

@@ -13,7 +13,7 @@ namespace AgentCore.Hosting
         /// <summary>The route the liveness check answers on.</summary>
         public const string HealthPattern = "/health";
 
-        /// <summary>Installs the WebSocket middleware and maps health, the Responses endpoint, and the conversation socket.</summary>
+        /// <summary>Installs the WebSocket middleware and maps health, the Responses endpoint, the conversation socket, and the AG-UI endpoint.</summary>
         /// <param name="app">The application to map on.</param>
         /// <param name="responsesPattern">
         /// The route the OpenAI-compatible Responses endpoint answers on, with <c>{entry}</c> naming
@@ -25,10 +25,15 @@ namespace AgentCore.Hosting
         /// <c>BeforeEntryAsync</c> picks it, or
         /// <see langword="null"/> for <see cref="ConversationEndpointRouteBuilderExtensions.DefaultPattern"/>.
         /// </param>
+        /// <param name="agUiPattern">
+        /// The route the AG-UI endpoint answers on, with <c>{entry}</c> naming the entry unless a hook's
+        /// <c>BeforeEntryAsync</c> picks it, or <see langword="null"/> for
+        /// <see cref="AgUiEndpointRouteBuilderExtensions.DefaultPattern"/>.
+        /// </param>
         /// <returns>The mapped routes, so a host adds its own conventions to each.</returns>
         /// <exception cref="ArgumentNullException"><paramref name="app"/> is <see langword="null"/>.</exception>
         public static AgentCoreEndpoints MapAgentCoreHost(
-            this WebApplication app, string? responsesPattern = null, string? conversationPattern = null)
+            this WebApplication app, string? responsesPattern = null, string? conversationPattern = null, string? agUiPattern = null)
         {
             ArgumentNullException.ThrowIfNull(app);
 
@@ -39,7 +44,8 @@ namespace AgentCore.Hosting
             return new AgentCoreEndpoints(
                 health,
                 app.MapResponses(responsesPattern ?? ResponsesEndpointRouteBuilderExtensions.DefaultPattern),
-                app.MapCall(conversationPattern ?? ConversationEndpointRouteBuilderExtensions.DefaultPattern));
+                app.MapCall(conversationPattern ?? ConversationEndpointRouteBuilderExtensions.DefaultPattern),
+                app.MapAgUi(agUiPattern ?? AgUiEndpointRouteBuilderExtensions.DefaultPattern));
         }
     }
 }

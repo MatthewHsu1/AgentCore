@@ -1151,6 +1151,8 @@ AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.MessageId.get -> strin
 AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.MessageId.init -> void
 AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.NamesParent.get -> bool
 AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.NamesParent.init -> void
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.KeepsWithdrawnTools.get -> bool
+AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.KeepsWithdrawnTools.init -> void
 AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.ParentMessageId.get -> string?
 AgentCore.Application.Runtime.Turn.ConversationTurnOrigin.ParentMessageId.init -> void
 AgentCore.Application.Runtime.Cut.TurnCut
@@ -2365,6 +2367,7 @@ AgentCore.Application.Hooks.Notices.ConversationUnloaded.ConversationUnloaded(Ag
 AgentCore.Application.Hooks.Notices.ConversationUnloaded.Deconstruct(out AgentCore.Application.Hooks.HookScope! Scope, out AgentCore.Application.Hooks.Notices.UnloadCause Cause) -> void
 AgentCore.Application.Hooks.Notices.ConversationUnloaded.Equals(AgentCore.Application.Hooks.Notices.ConversationUnloaded? other) -> bool
 AgentCore.Application.Hooks.Gates.EntryTransport
+AgentCore.Application.Hooks.Gates.EntryTransport.AgUi = 2 -> AgentCore.Application.Hooks.Gates.EntryTransport
 AgentCore.Application.Hooks.Gates.EntryTransport.Call = 1 -> AgentCore.Application.Hooks.Gates.EntryTransport
 AgentCore.Application.Hooks.Gates.EntryTransport.Http = 0 -> AgentCore.Application.Hooks.Gates.EntryTransport
 AgentCore.Application.Hooks.Notices.Fault
@@ -2928,6 +2931,15 @@ AgentCore.Application.Hooks.Gates.CompactionGate.Cancel() -> void
 AgentCore.Application.Hooks.Gates.CompactionGate.Items.get -> System.Collections.Generic.IDictionary<string!, object?>!
 AgentCore.Application.Hooks.Gates.CompactionGate.MessageCount.get -> int
 AgentCore.Application.Hooks.Gates.CompactionGate.ReplaceSummary(string! text) -> void
+AgentCore.Application.Hooks.Gates.ConversationGate
+AgentCore.Application.Hooks.Gates.ConversationGate.ConversationId.get -> string!
+AgentCore.Application.Hooks.Gates.ConversationGate.Entry.get -> string!
+AgentCore.Application.Hooks.Gates.ConversationGate.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
+AgentCore.Application.Hooks.Gates.ConversationGate.Refuse() -> void
+AgentCore.Application.Hooks.Gates.ConversationGate.Resuming.get -> bool
+AgentCore.Application.Hooks.Gates.ConversationGate.Route.get -> string!
+AgentCore.Application.Hooks.Gates.ConversationGate.Transport.get -> AgentCore.Application.Hooks.Gates.EntryTransport
+AgentCore.Application.Hooks.Gates.ConversationGate.User.get -> System.Security.Claims.ClaimsPrincipal?
 AgentCore.Application.Hooks.Gates.EntryGate
 AgentCore.Application.Hooks.Gates.EntryGate.Choose(string! entry) -> void
 AgentCore.Application.Hooks.Gates.EntryGate.Headers.get -> System.Collections.Generic.IReadOnlyDictionary<string!, string!>!
@@ -3019,6 +3031,7 @@ static AgentCore.Application.Hooks.GatePoint.AfterTool.get -> AgentCore.Applicat
 static AgentCore.Application.Hooks.GatePoint.All.get -> System.Collections.Generic.IReadOnlyList<AgentCore.Application.Hooks.GatePoint!>!
 static AgentCore.Application.Hooks.GatePoint.BeforeCall.get -> AgentCore.Application.Hooks.GatePoint!
 static AgentCore.Application.Hooks.GatePoint.BeforeCompaction.get -> AgentCore.Application.Hooks.GatePoint!
+static AgentCore.Application.Hooks.GatePoint.BeforeConversation.get -> AgentCore.Application.Hooks.GatePoint!
 static AgentCore.Application.Hooks.GatePoint.BeforeEntry.get -> AgentCore.Application.Hooks.GatePoint!
 static AgentCore.Application.Hooks.GatePoint.BeforeModel.get -> AgentCore.Application.Hooks.GatePoint!
 static AgentCore.Application.Hooks.GatePoint.BeforeRun.get -> AgentCore.Application.Hooks.GatePoint!
@@ -3032,6 +3045,7 @@ virtual AgentCore.Application.Hooks.AgentHook.AfterToolAsync(AgentCore.Applicati
 virtual AgentCore.Application.Hooks.AgentHook.AfterToolFailedAsync(AgentCore.Application.Hooks.Gates.ToolFailureGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 virtual AgentCore.Application.Hooks.AgentHook.BeforeCallAsync(AgentCore.Application.Hooks.Gates.CallGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 virtual AgentCore.Application.Hooks.AgentHook.BeforeCompactionAsync(AgentCore.Application.Hooks.Gates.CompactionGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
+virtual AgentCore.Application.Hooks.AgentHook.BeforeConversationAsync(AgentCore.Application.Hooks.Gates.ConversationGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 virtual AgentCore.Application.Hooks.AgentHook.BeforeEntryAsync(AgentCore.Application.Hooks.Gates.EntryGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 virtual AgentCore.Application.Hooks.AgentHook.BeforeModelAsync(AgentCore.Application.Hooks.Gates.ModelGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask
 virtual AgentCore.Application.Hooks.AgentHook.BeforeRunAsync(AgentCore.Application.Hooks.Gates.RunGate! gate, System.Threading.CancellationToken cancellationToken) -> System.Threading.Tasks.ValueTask

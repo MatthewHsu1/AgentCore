@@ -156,7 +156,7 @@ namespace AgentCore.AspNetCore.Calls
 
             string words = older is null ? callerWords : older.Words + " " + callerWords;
             CallAsk ask = new(words, older is null ? before : [.. older.Before, .. before], CancellationTokenSource.CreateLinkedTokenSource(cancellationToken));
-            return (ask, new ConversationTurnOrigin(askId, _anchor) { NamesParent = true });
+            return (ask, new ConversationTurnOrigin(askId, _anchor) { NamesParent = true, KeepsWithdrawnTools = true });
         }
 
         private async Task ReplaceAsync(CallAsk older)

@@ -16,6 +16,9 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <summary>Gets the tag of a call route (the conversation socket).</summary>
         public static AgentCoreRouteMetadata Call { get; } = new(EntryTransport.Call);
 
+        /// <summary>Gets the tag of an AG-UI route.</summary>
+        public static AgentCoreRouteMetadata AgUi { get; } = new(EntryTransport.AgUi);
+
         /// <summary>Gets how requests reach the route.</summary>
         public EntryTransport Transport { get; }
     }
