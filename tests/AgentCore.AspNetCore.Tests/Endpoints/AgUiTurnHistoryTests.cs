@@ -492,6 +492,29 @@ public sealed class AgUiTurnHistoryTests
         Assert.Equal([("send_email", "a@b.com"), ("send_email", "a@b.com")], runs.All);
     }
 
+    [Fact(Timeout = 60_000)]
+    public async Task ResumedTurn_ShowsTheGatedCallOnce_WithItsResult()
+    {
+        ToolRuns runs = new();
+        RecordingChatClient model = new(new SingleCallChatClient());
+        FakeBlobStoreAdapter blobs = new();
+        await using ResponsesHost host = await ResponsesHost.StartAsync(
+            OneToolYaml,
+            model,
+            configure: options => options.UseBlobStores(blobs).AddToolSource(_ => new OneGatedSource(runs)),
+            map: app => app.MapAgUi());
+        _ = await ResumeAsync(host, "t-turns-resumed", trimmed: false);
+        _ = await StoredRows.SettleAsync(host.Services, "t-turns-resumed", 4);
+
+        JsonNode turns = await TurnsAsync(host.Client, "t-turns-resumed");
+
+        JsonNode call = Assert.Single(
+            turns["messages"]!.AsArray().SelectMany(m => m!["content"]!.AsArray()),
+            p => p!["type"]!.GetValue<string>() == "tool-call")!;
+        Assert.NotNull(call["result"]);
+        Assert.Null(call["approval"]);
+    }
+
     private static async Task<List<JsonElement>> ResumeAsync(ResponsesHost host, string thread, bool trimmed)
     {
         _ = await OpenThreadAsync(host, thread);

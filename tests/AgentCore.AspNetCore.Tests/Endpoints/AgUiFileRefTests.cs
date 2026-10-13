@@ -288,6 +288,42 @@ public sealed class AgUiFileRefTests
     }
 
     [Fact(Timeout = 60_000)]
+    public async Task ReferenceToAFileTheStoreDidNotKeep_Is404_RowsIdentical()
+    {
+        FakeBlobStoreAdapter blobs = new();
+        using FragmentingChatClient reply = new("seen it");
+        await using ResponsesHost host = await StartAsync(reply, blobs);
+        string thread = await OpenThreadAsync(host, "t-unkept");
+        await blobs.Store.PutAsync(new BlobWrite(thread, "dropped.png", "image/png", new MemoryStream(Png), Png.Length), Ct);
+        await host.Services.GetRequiredService<IConversationStore>().AppendAsync(thread, [new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, [new FileContent { Name = "dropped.png", FileId = "cfile_1", MediaType = "image/png", Length = Png.Length }]), "m1")], null, Ct);
+        string beforeJson = RowsJson(await StoredRows.SettleAsync(host.Services, thread, 1));
+
+        using HttpResponseMessage response = await PostAsync(host.Client, Run(thread, [UserParts("u2", TextPart("again"), UrlImagePart($"https://host.test/agui/threads/{thread}/files/dropped.png"))]));
+        JsonElement only = Assert.Single(await ReadEventsAsync(response));
+
+        Assert.Equal("attachment_not_found", only.GetProperty("code").GetString());
+        Assert.Equal(0, reply.Calls);
+        Assert.Equal(beforeJson, RowsJson(await StoredRows.SettleAsync(host.Services, thread, 1)));
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task ReferenceToAnAgentFile_ReachesTheModelAsBytes()
+    {
+        FakeBlobStoreAdapter blobs = new();
+        using FragmentingChatClient reply = new("seen it");
+        await using ResponsesHost host = await StartAsync(reply, blobs);
+        string thread = await OpenThreadAsync(host, "t-agent-file");
+        await blobs.Store.PutAsync(new BlobWrite(thread, "chart.png", "image/png", new MemoryStream(Png), Png.Length), Ct);
+        await host.Services.GetRequiredService<IConversationStore>().AppendAsync(thread, [new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, [new FileContent { Name = "chart.png", FileId = "cfile_1", MediaType = "image/png", Length = Png.Length, Kept = true }]), "m1")], null, Ct);
+
+        using HttpResponseMessage response = await PostAsync(host.Client, Run(thread, [UserParts("u2", TextPart("describe it"), UrlImagePart($"https://host.test/agui/threads/{thread}/files/chart.png"))]));
+        List<JsonElement> events = await ReadEventsAsync(response);
+
+        Assert.DoesNotContain(events, e => e.GetProperty("type").GetString() == "RUN_ERROR");
+        Assert.Contains(reply.LastRequest!.SelectMany(m => m.Contents).OfType<DataContent>(), data => data.Data.ToArray().SequenceEqual(Png));
+    }
+
+    [Fact(Timeout = 60_000)]
     public async Task TraversalName_Is400_RowsIdentical()
     {
         FakeBlobStoreAdapter blobs = new();

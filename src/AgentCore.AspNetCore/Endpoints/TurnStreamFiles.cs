@@ -43,9 +43,8 @@ namespace AgentCore.AspNetCore.Endpoints
         }
 
         /// <summary>Lists every noted kept file, in first-seen order, without asking the store.</summary>
-        /// <param name="conversationId">The conversation that owns the files.</param>
         /// <returns>One part for each noted file the store kept.</returns>
-        internal IEnumerable<TurnStreamPart> Resolve(string conversationId)
+        internal IEnumerable<TurnStreamPart> Resolve()
         {
             List<FileContent> kept = [];
             foreach (FileContent file in _files)

@@ -91,7 +91,7 @@ namespace AgentCore.AspNetCore.Endpoints
                 {
                     if (fileRefOf is not null)
                     {
-                        foreach (TurnStreamPart part in files.Resolve(conversation.ConversationId))
+                        foreach (TurnStreamPart part in files.Resolve())
                         {
                             FilePayload payload = (FilePayload)part.Payload;
                             yield return new CustomEvent
