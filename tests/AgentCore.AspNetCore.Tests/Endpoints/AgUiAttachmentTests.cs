@@ -157,9 +157,9 @@ public sealed class AgUiAttachmentTests
     [Fact]
     public void SizeCheck_Counts_DecodedBytes()
     {
-        ChatMessage message = new(ChatRole.User, [new DataContent(new byte[10], "image/png")]);
+        ChatMessage message = new(ChatRole.User, [new DataContent(new byte[(int)AgUiInput.MaxMessageChars + 1], "image/png")]);
 
-        Assert.Null(AgUiInput.CheckSize(message));
+        Assert.Equal(AgUiInput.TooLargeCode, AgUiInput.CheckSize(message)?.Code);
     }
 
     [Fact(Timeout = 60_000)]

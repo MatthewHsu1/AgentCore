@@ -42,6 +42,7 @@ namespace AgentCore.AspNetCore.Endpoints
                         break;
                 }
             }
+
             return size > MaxMessageChars
                 ? (400, TooLargeCode, $"a message carries at most {MaxMessageChars} characters of text and bytes of attachments; this one carries {size}.")
                 : null;
