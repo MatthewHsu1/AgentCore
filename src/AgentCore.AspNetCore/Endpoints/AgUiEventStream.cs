@@ -21,27 +21,66 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <summary>
         /// Converts one turn's reply into AG-UI events: the split stream through AGUI.Server,
         /// stamped with this run's ids, framed by stage snapshots, with a mid-stream turn
-        /// conflict renamed to the code every other transport answers.
+        /// conflict renamed to the code every other transport answers. <paramref name="shownCalls"/>
+        /// names the tool call ids the client's messages already show, or <see langword="null"/>
+        /// outside a resume run: a resumed approval re-runs a call the client already shows, and
+        /// announcing it again makes assistant-ui file the result under a second copy it then drops,
+        /// so those announcements are dropped while their results still stream onto the asking turn's part.
+        /// <paramref name="content"/> carries the content rules of this run: sources held until the
+        /// words start, compaction as an in-place activity, the failure set, and the strip of an
+        /// update's <c>AdditionalProperties</c> before the converter sees it.
         /// </summary>
         internal static async IAsyncEnumerable<BaseEvent> EventsAsync(
             ConversationSession conversation,
             IAsyncEnumerable<ChatResponseUpdate> updates,
             AgUiTurnIds.MessageIds ids,
             ChatRequestContext context,
+            IReadOnlySet<string>? shownCalls,
+            AgUiContent content,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(conversation);
             ArgumentNullException.ThrowIfNull(updates);
             ArgumentNullException.ThrowIfNull(ids);
             ArgumentNullException.ThrowIfNull(context);
+            ArgumentNullException.ThrowIfNull(content);
 
             Exception? failure = null;
+            List<BaseEvent> heldSources = [];
 
-            await foreach (BaseEvent evt in Split(updates, e => failure = e, cancellationToken)
+            await foreach (BaseEvent evt in Split(updates, content, e => failure = e, cancellationToken)
                 .AsAGUIEventStreamAsync(context, cancellationToken).ConfigureAwait(false))
             {
                 evt.RawEvent = null;
+
+                if (shownCalls is not null
+                    && (evt is ToolCallStartEvent { ToolCallId: var started } && shownCalls.Contains(started)
+                        || evt is ToolCallArgsEvent { ToolCallId: var argued } && shownCalls.Contains(argued)
+                        || evt is ToolCallEndEvent { ToolCallId: var ended } && shownCalls.Contains(ended)))
+                {
+                    continue;
+                }
+
                 ids.Stamp(evt);
+
+                // A source held back until the model's words start (or the run ends): a data part between
+                // two tool calls splits assistant-ui's tool group, so live would draw two groups where a
+                // reload draws one. The parts land after the turn's tool calls, the same order as history.
+                if (evt is CustomEvent { Name: TurnStreamPart.Source })
+                {
+                    heldSources.Add(evt);
+                    continue;
+                }
+
+                if (evt is TextMessageStartEvent or RunFinishedEvent or RunErrorEvent && heldSources.Count > 0)
+                {
+                    foreach (BaseEvent held in heldSources)
+                    {
+                        yield return held;
+                    }
+
+                    heldSources.Clear();
+                }
 
                 if (evt is RunFinishedEvent)
                 {
@@ -66,10 +105,14 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <summary>
         /// Takes AgentCore's own contents off each update before AGUI.Server sees them: the converter
         /// serializes every update into rawEvent first, and a content type it does not know ends the
-        /// run with RUN_ERROR. Stripped contents leave as <c>CUSTOM</c> events instead.
+        /// run with RUN_ERROR. Sources and the commit leave as <c>CUSTOM</c> events, compaction as an
+        /// in-place activity snapshot, and an update's <c>AdditionalProperties</c> are stripped first
+        /// (see <see cref="AgUiContent.Prepare"/>): the fallback's disposition holds the model's thrown
+        /// exception, which the converter cannot serialize.
         /// </summary>
         private static async IAsyncEnumerable<ChatResponseUpdate> Split(
             IAsyncEnumerable<ChatResponseUpdate> updates,
+            AgUiContent content,
             Action<Exception> onFailure,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
@@ -89,13 +132,18 @@ namespace AgentCore.AspNetCore.Endpoints
                     onFailure(e);
                     throw;
                 }
-
-                ChatResponseUpdate update = reader.Current;
+                ChatResponseUpdate update = AgUiContent.Prepare(reader.Current);
                 bool notice = update.Contents.Any(c => c is NoticeContent or TurnCommittedContent);
 
                 foreach (TurnStreamPart part in TurnStreamParts.From(update, names))
                 {
-                    if (part.Member is TurnStreamPart.Source or TurnStreamPart.Compaction or TurnStreamPart.MessageCommitted)
+                    content.Note(part);
+                    
+                    if (part.Member is TurnStreamPart.Compaction)
+                    {
+                        yield return new ChatResponseUpdate { RawRepresentation = content.ActivityFor(part) };
+                    }
+                    else if (part.Member is TurnStreamPart.Source or TurnStreamPart.MessageCommitted)
                     {
                         yield return new ChatResponseUpdate
                         {
@@ -114,7 +162,7 @@ namespace AgentCore.AspNetCore.Endpoints
                 }
 
                 List<AIContent> rest = [.. update.Contents.Where(c => c is not (SourceContent or FileContent))];
-                if (rest.Count == update.Contents.Count && update.AdditionalProperties is null)
+                if (rest.Count == update.Contents.Count)
                 {
                     yield return update;
                 }

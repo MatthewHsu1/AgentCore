@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using AgentCore.Application.Transcript;
 using AgentCore.Domain;
 using Microsoft.Agents.AI;
@@ -137,6 +138,43 @@ namespace AgentCore.Application.Runtime.Harness
             }
 
             return pending;
+        }
+
+        /// <summary>
+        /// Reads the queued approvals no answer covers yet out of a stored conversation's provider state:
+        /// the queue minus the answers AgentCore holds and the ones MAF's approval layer already collected.
+        /// </summary>
+        /// <param name="providers">What <c>ConversationSessionState.Providers</c> holds: each value a clone of one serialized state-bag entry.</param>
+        /// <returns>The open approvals, oldest first; empty when the state carries no queue.</returns>
+        internal static IReadOnlyList<PendingApproval> OpenOf(IReadOnlyDictionary<string, JsonElement> providers)
+        {
+            ArgumentNullException.ThrowIfNull(providers);
+
+            if (!providers.TryGetValue(PendingStateKey, out JsonElement queue))
+            {
+                return [];
+            }
+
+            JsonObject bag = new() { [PendingStateKey] = JsonNode.Parse(queue.GetRawText()) };
+            if (providers.TryGetValue(HeldStateKey, out JsonElement held))
+            {
+                bag[HeldStateKey] = JsonNode.Parse(held.GetRawText());
+            }
+
+            if (providers.TryGetValue(StandingStateKey, out JsonElement standing))
+            {
+                bag[StandingStateKey] = JsonNode.Parse(standing.GetRawText());
+            }
+
+            JsonElement envelope = JsonSerializer.SerializeToElement(bag);
+            List<PendingApproval> open = [.. Read(envelope)];
+            if (open.Count == 0)
+            {
+                return open;
+            }
+
+            HashSet<string> answered = new(Collected(envelope), StringComparer.Ordinal);
+            return [.. open.Where(approval => !answered.Contains(approval.RequestId) && !IsHeld(envelope, approval.RequestId))];
         }
 
         /// <summary>Builds the answer message for one pending request.</summary>

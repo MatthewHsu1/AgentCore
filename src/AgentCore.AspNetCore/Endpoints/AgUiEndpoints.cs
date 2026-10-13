@@ -1,7 +1,4 @@
 using System.Text.Json;
-using AGUI.Abstractions;
-using AGUI.Formatting;
-using AGUI.Server;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Runtime;
@@ -11,6 +8,9 @@ using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Runtime.Turn.Lifecycle;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
+using AGUI.Abstractions;
+using AGUI.Formatting;
+using AGUI.Server;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -93,7 +93,7 @@ namespace AgentCore.AspNetCore.Endpoints
                 return;
             }
 
-            if (!await AgentCoreConversationGate.AllowAsync(http, entry, input.ThreadId, resuming: false, cancellationToken).ConfigureAwait(false))
+            if (!await AgentCoreConversationGate.AllowAsync(http, entry, input.ThreadId, resuming: (input.Resume?.Count ?? 0) > 0, cancellationToken).ConfigureAwait(false))
             {
                 await AgUiRefusal.WriteAsync(http, input, 404, AgentCoreConversationGate.NotFoundCode, notFound).ConfigureAwait(false);
                 return;
@@ -102,22 +102,27 @@ namespace AgentCore.AspNetCore.Endpoints
             // AgentCore runs no client tools.
             input.Tools = [];
             ChatRequestContext context = input.ToChatRequestContext(Json);
+            IList<AGUIResume> resume = input.Resume ?? [];
 
             // The client resends the whole thread every run; the conversation already holds it, so only the newest words count.
-            ChatMessage? words = AgUiInput.LastUserInput(context.Messages);
-            if (words is null)
+            // Beside a resume, only words sent after the interrupted message count (assistant-ui's steerAway).
+            ChatMessage? words = resume.Count == 0
+                ? AgUiInput.LastUserInput(context.Messages)
+                : AgUiApprovals.WordsBeside(input, context.Messages);
+
+            if (resume.Count == 0 && words is null)
             {
                 await AgUiRefusal.WriteAsync(http, input, 400, "no_user_message", "the run carries no user message with text, so there is no turn to run.").ConfigureAwait(false);
                 return;
             }
 
-            if (AgUiInput.CheckSize(words) is { } tooLarge)
+            if (words is not null && AgUiInput.CheckSize(words) is { } tooLarge)
             {
                 await AgUiRefusal.WriteAsync(http, input, tooLarge.Status, tooLarge.Code, tooLarge.Message).ConfigureAwait(false);
                 return;
             }
 
-            ChatMessage turnInput = AgUiInput.Sanitize(words);
+            ChatMessage? sanitized = words is null ? null : AgUiInput.Sanitize(words);
 
             Microsoft.Agents.AI.AgentSession session;
             try
@@ -148,25 +153,66 @@ namespace AgentCore.AspNetCore.Endpoints
                     CallerTimeZone.Set(session, zone);
                 }
 
-                ConversationTurnOrigin origin = await AgUiTurnIds.OriginAsync(
-                    AgUiTurnIds.Read(input),
-                    conversation.ConversationId,
-                    http.RequestServices.GetRequiredService<IConversations>(),
-                    cancellationToken).ConfigureAwait(false);
+                ChatMessage? turnInput = sanitized;
+                ConversationTurnOrigin? origin = null;
+
+                if (resume.Count > 0)
+                {
+                    AgUiApprovals.Reading reading = await AgUiApprovals.ReadAsync(
+                        conversation,
+                        resume,
+                        sanitized,
+                        http.RequestServices.GetRequiredService<IConversations>(),
+                        cancellationToken).ConfigureAwait(false);
+
+                    if (reading.Replay)
+                    {
+                        await AgUiApprovals.WriteReplayAsync(http, input).ConfigureAwait(false);
+                        return;
+                    }
+
+                    if (reading.Message is null)
+                    {
+                        await AgUiRefusal.WriteAsync(http, input, 409, reading.Code!, reading.Error!).ConfigureAwait(false);
+                        return;
+                    }
+
+                    turnInput = reading.Message;
+                }
+
+                // A resume run carries no anchor and the endpoint ignores one: only words name where the turn hangs.
+                if (sanitized is not null)
+                {
+                    origin = await AgUiTurnIds.OriginAsync(
+                        AgUiTurnIds.Read(input),
+                        conversation.ConversationId,
+                        http.RequestServices.GetRequiredService<IConversations>(),
+                        cancellationToken).ConfigureAwait(false);
+                }
 
                 // Started before the headers: only a started turn has opened its stored state and caught up on
                 // other sessions', so only then does the stage name the one the turn speaks in.
-                await using TurnRun run = await conversation.StartTurnAsync(turnInput, origin, cancellationToken).ConfigureAwait(false);
+                // Without a resume the null-words run was refused above; with one the reading returned or set it.
+                await using TurnRun run = await conversation.StartTurnAsync(turnInput!, origin, cancellationToken).ConfigureAwait(false);
                 AgUiTurnIds.MessageIds ids = new(run.TurnIndex);
+
+                // A resumed approval re-runs calls the client's messages already show; their announcements
+                // are dropped so each result lands on the asking turn's part.
+                HashSet<string>? shown = resume.Count == 0
+                    ? null
+                    : [.. context.Messages.SelectMany(m => m.Contents.OfType<FunctionCallContent>()).Select(c => c.CallId)];
 
                 http.Response.StatusCode = StatusCodes.Status200OK;
                 http.Response.ContentType = SseEventStreamFormatter.ServerSentEventsMediaType;
                 http.Response.Headers.CacheControl = "no-cache";
                 http.Response.Headers[ResponsesEndpointRouteBuilderExtensions.StageHeaderName] = conversation.Stage;
 
-                await new SseEventStreamFormatter().WriteAsync(
-                    AgUiEventStream.EventsAsync(conversation, run.Updates, ids, context, cancellationToken),
+                AgUiContent content = new(run.TurnIndex);
+
+                await AgUiContent.WriteAsync(
+                    AgUiEventStream.EventsAsync(conversation, run.Updates, ids, context, shown, content, cancellationToken),
                     http.Response.Body,
+                    content,
                     cancellationToken).ConfigureAwait(false);
             }
             catch (ConversationTurnConflictException) when (!http.Response.HasStarted)

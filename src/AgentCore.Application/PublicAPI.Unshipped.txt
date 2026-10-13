@@ -3208,3 +3208,6 @@ static AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.operator 
 static AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.operator !=(AgentCore.Application.Conversation.Commands.SetVoicePlanCommand? left, AgentCore.Application.Conversation.Commands.SetVoicePlanCommand? right) -> bool
 const AgentCore.Application.Conversation.Commands.SetVoicePlanCommand.MaxLength = 1000 -> int
 const AgentCore.Application.Tools.Builtin.BuiltinToolNames.VoicePlan = "voice.plan" -> string!
+AgentCore.Application.Conversation.PendingApprovals
+static AgentCore.Application.Conversation.PendingApprovals.Read(AgentCore.Application.Conversation.StoredConversation! stored) -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.PendingApproval!>!
+static AgentCore.Application.Conversation.PendingApprovals.Read(AgentCore.Application.Conversation.ConversationRecord! record) -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.PendingApproval!>!
