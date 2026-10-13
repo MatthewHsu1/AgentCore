@@ -5,9 +5,11 @@ namespace AgentCore.Application.Blobs
     /// <param name="Name">The name it is stored under.</param>
     /// <param name="MediaType">The IANA media type, such as <c>image/png</c>.</param>
     /// <param name="Length">How many bytes it holds.</param>
+    /// <param name="DownloadName">The file name a link serves it under, or <see langword="null"/> for <see cref="Name"/>.</param>
     public sealed record BlobRef(
         string OwnerId,
         string Name,
         string MediaType,
-        long Length);
+        long Length,
+        string? DownloadName = null);
 }

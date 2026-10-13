@@ -1950,8 +1950,10 @@ AgentCore.Application.Blobs.BlobRead.MediaType.get -> string!
 AgentCore.Application.Blobs.BlobRead.MediaType.init -> void
 AgentCore.Application.Blobs.BlobRef
 AgentCore.Application.Blobs.BlobRef.<Clone>$() -> AgentCore.Application.Blobs.BlobRef!
-AgentCore.Application.Blobs.BlobRef.BlobRef(string! OwnerId, string! Name, string! MediaType, long Length) -> void
-AgentCore.Application.Blobs.BlobRef.Deconstruct(out string! OwnerId, out string! Name, out string! MediaType, out long Length) -> void
+AgentCore.Application.Blobs.BlobRef.BlobRef(string! OwnerId, string! Name, string! MediaType, long Length, string? DownloadName = null) -> void
+AgentCore.Application.Blobs.BlobRef.Deconstruct(out string! OwnerId, out string! Name, out string! MediaType, out long Length, out string? DownloadName) -> void
+AgentCore.Application.Blobs.BlobRef.DownloadName.get -> string?
+AgentCore.Application.Blobs.BlobRef.DownloadName.init -> void
 AgentCore.Application.Blobs.BlobRef.Equals(AgentCore.Application.Blobs.BlobRef? other) -> bool
 AgentCore.Application.Blobs.BlobRef.Length.get -> long
 AgentCore.Application.Blobs.BlobRef.Length.init -> void
@@ -3211,3 +3213,10 @@ const AgentCore.Application.Tools.Builtin.BuiltinToolNames.VoicePlan = "voice.pl
 AgentCore.Application.Conversation.PendingApprovals
 static AgentCore.Application.Conversation.PendingApprovals.Read(AgentCore.Application.Conversation.StoredConversation! stored) -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.PendingApproval!>!
 static AgentCore.Application.Conversation.PendingApprovals.Read(AgentCore.Application.Conversation.ConversationRecord! record) -> System.Collections.Generic.IReadOnlyList<AgentCore.Domain.PendingApproval!>!
+AgentCore.Application.Transcript.InboundFiles
+static AgentCore.Application.Transcript.InboundFiles.FileAsync(AgentCore.Application.Ports.IBlobStore! blobs, string! conversationId, Microsoft.Extensions.AI.ChatMessage! message, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<Microsoft.Extensions.AI.ChatMessage!>
+const AgentCore.Application.Transcript.InboundFiles.FileIdPrefix = "upload:" -> string!
+static AgentCore.Application.Transcript.InboundFiles.Is(AgentCore.Application.Transcript.FileContent! file) -> bool
+static AgentCore.Application.Transcript.InboundFiles.RehydrateAsync(AgentCore.Application.Ports.IBlobStore! blobs, string! conversationId, System.Collections.Generic.IEnumerable<Microsoft.Extensions.AI.ChatMessage!>! messages, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) -> System.Threading.Tasks.ValueTask<System.Collections.Generic.List<Microsoft.Extensions.AI.ChatMessage!>!>
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Blobs.get -> AgentCore.Application.Ports.IBlobStore?
+AgentCore.Application.Configuration.Compilation.AgentCompilationContext.Blobs.init -> void

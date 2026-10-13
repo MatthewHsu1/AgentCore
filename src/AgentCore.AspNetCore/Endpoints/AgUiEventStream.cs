@@ -29,6 +29,9 @@ namespace AgentCore.AspNetCore.Endpoints
         /// <paramref name="content"/> carries the content rules of this run: sources held until the
         /// words start, compaction as an in-place activity, the failure set, and the strip of an
         /// update's <c>AdditionalProperties</c> before the converter sees it.
+        /// <paramref name="fileRefOf"/> mints the absolute file-door reference for one stored blob
+        /// name, or <see langword="null"/> off the AG-UI route: the turn's published files leave as
+        /// <c>agentcore_file</c> CUSTOM events at run finish, carrying <c>ref</c>, never a presigned URL.
         /// </summary>
         internal static async IAsyncEnumerable<BaseEvent> EventsAsync(
             ConversationSession conversation,
@@ -37,6 +40,7 @@ namespace AgentCore.AspNetCore.Endpoints
             ChatRequestContext context,
             IReadOnlySet<string>? shownCalls,
             AgUiContent content,
+            Func<string, string>? fileRefOf,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
         {
             ArgumentNullException.ThrowIfNull(conversation);
@@ -47,8 +51,9 @@ namespace AgentCore.AspNetCore.Endpoints
 
             Exception? failure = null;
             List<BaseEvent> heldSources = [];
+            TurnStreamFiles files = new();
 
-            await foreach (BaseEvent evt in Split(updates, content, e => failure = e, cancellationToken)
+            await foreach (BaseEvent evt in Split(updates, files, content, e => failure = e, cancellationToken)
                 .AsAGUIEventStreamAsync(context, cancellationToken).ConfigureAwait(false))
             {
                 evt.RawEvent = null;
@@ -84,6 +89,19 @@ namespace AgentCore.AspNetCore.Endpoints
 
                 if (evt is RunFinishedEvent)
                 {
+                    if (fileRefOf is not null)
+                    {
+                        foreach (TurnStreamPart part in files.Resolve(conversation.ConversationId))
+                        {
+                            FilePayload payload = (FilePayload)part.Payload;
+                            yield return new CustomEvent
+                            {
+                                Name = part.Member,
+                                Value = JsonSerializer.SerializeToElement(payload with { Ref = fileRefOf(payload.Name) }, ResponsesJson.Options),
+                            };
+                        }
+                    }
+
                     yield return Stage(conversation, after: true);
                 }
 
@@ -112,6 +130,7 @@ namespace AgentCore.AspNetCore.Endpoints
         /// </summary>
         private static async IAsyncEnumerable<ChatResponseUpdate> Split(
             IAsyncEnumerable<ChatResponseUpdate> updates,
+            TurnStreamFiles files,
             AgUiContent content,
             Action<Exception> onFailure,
             [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken)
@@ -134,7 +153,10 @@ namespace AgentCore.AspNetCore.Endpoints
                 }
                 ChatResponseUpdate update = AgUiContent.Prepare(reader.Current);
                 bool notice = update.Contents.Any(c => c is NoticeContent or TurnCommittedContent);
-
+                if (!notice)
+                {
+                    files.Note(update);
+                }
                 foreach (TurnStreamPart part in TurnStreamParts.From(update, names))
                 {
                     content.Note(part);

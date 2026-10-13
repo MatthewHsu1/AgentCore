@@ -102,13 +102,13 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         }
 
         [Fact]
-        public void UrlImagePart_Dropped_ModelGetsNoUrl()
+        public void UrlImagePart_Kept_ForResolveOrRefuseDownstream()
         {
             ChatMessage message = new(ChatRole.User, [new TextContent("see this"), new UriContent("https://x/y.png", "image/png")]);
 
             ChatMessage sanitized = AgUiInput.Sanitize(message);
 
-            Assert.DoesNotContain(sanitized.Contents, content => content is UriContent);
+            Assert.Contains(sanitized.Contents, content => content is UriContent);
             Assert.Contains(sanitized.Contents, content => content is TextContent text && text.Text == "see this");
         }
 

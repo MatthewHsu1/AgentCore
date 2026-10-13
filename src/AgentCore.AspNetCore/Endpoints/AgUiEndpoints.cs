@@ -6,6 +6,7 @@ using AgentCore.Application.Runtime.Harness;
 using AgentCore.Application.Runtime.Session;
 using AgentCore.Application.Runtime.Turn;
 using AgentCore.Application.Runtime.Turn.Lifecycle;
+using AgentCore.Application.Transcript;
 using AgentCore.AspNetCore.DependencyInjection;
 using AgentCore.AspNetCore.DependencyInjection.Startup;
 using AGUI.Abstractions;
@@ -37,7 +38,7 @@ namespace AgentCore.AspNetCore.Endpoints
             return endpoints.MapAgUi(DefaultPattern);
         }
 
-        /// <summary>Maps every entry on one route.</summary>
+        /// <summary>Maps every entry on one route, with the file doors beside it, all behind the G-7 ownership hook.</summary>
         /// <param name="endpoints">The route builder of the host.</param>
         /// <param name="pattern">
         /// The route to answer on. It carries the <c>{entry}</c> parameter, or a hook's
@@ -49,7 +50,11 @@ namespace AgentCore.AspNetCore.Endpoints
             ArgumentNullException.ThrowIfNull(endpoints);
             ArgumentException.ThrowIfNullOrEmpty(pattern);
 
-            return endpoints.MapPost(pattern, HandleAsync).WithMetadata(AgentCoreRouteMetadata.AgUi);
+            IEndpointConventionBuilder run = endpoints.MapPost(pattern, HandleAsync).WithMetadata(AgentCoreRouteMetadata.AgUi);
+            _ = endpoints.MapAgUiFileLink();
+            _ = endpoints.MapAgUiFileDoor();
+            _ = endpoints.MapAgUiTurnHistory();
+            return run;
         }
 
         /// <summary>Runs one AG-UI run: the refusal prefix, then one turn of the entry's conversation.</summary>
@@ -112,7 +117,47 @@ namespace AgentCore.AspNetCore.Endpoints
 
             if (resume.Count == 0 && words is null)
             {
-                await AgUiRefusal.WriteAsync(http, input, 400, "no_user_message", "the run carries no user message with text, so there is no turn to run.").ConfigureAwait(false);
+                await AgUiRefusal.WriteAsync(http, input, 400, "no_user_message", "the run carries no user message with text or a file, so there is no turn to run.").ConfigureAwait(false);
+                return;
+            }
+
+            if (words is not null && resume.Count == 0)
+            {
+                (ChatMessage Resolved, (int Status, string Code, string Message)? Refused) resolved =
+                    await AgUiFileRefs.ResolveAsync(
+                        words,
+                        input.ThreadId,
+                        http.Request.PathBase,
+                        http.RequestServices.GetRequiredService<IConversations>(),
+                        cancellationToken).ConfigureAwait(false);
+                if (resolved.Refused is { } refused)
+                {
+                    await AgUiRefusal.WriteAsync(http, input, refused.Status, refused.Code, refused.Message).ConfigureAwait(false);
+                    return;
+                }
+
+                words = resolved.Resolved;
+            }
+            // A regenerate names the stored user row it re-asks; the row's files stand in for the
+            // body's bytes, so a live regenerate files nothing twice and an after-reload one (whose
+            // references ResolveAsync already restored) keeps working. A count mismatch files normally.
+            // Raw URLs never stand in: after resolve the only UriContent left is non-reference links,
+            // which the attachment check below must still refuse.
+            if (words is not null && resume.Count == 0
+                && words.Contents.Any(c => c is DataContent)
+                && AgUiTurnIds.Read(input).MessageId is { } named)
+            {
+                words = await StandInStoredFilesAsync(
+                    words,
+                    named,
+                    input.ThreadId,
+                    http.RequestServices.GetRequiredService<IConversations>(),
+                    cancellationToken).ConfigureAwait(false);
+            }
+
+            if (words is not null && AgUiAttachments.Check(words, new AgUiAttachmentLimits()) is { } denied)
+            {
+                await AgUiRefusal.WriteAsync(http, input, denied.Status, denied.Code, denied.Message).ConfigureAwait(false);
                 return;
             }
 
@@ -176,8 +221,13 @@ namespace AgentCore.AspNetCore.Endpoints
                         await AgUiRefusal.WriteAsync(http, input, 409, reading.Code!, reading.Error!).ConfigureAwait(false);
                         return;
                     }
-
                     turnInput = reading.Message;
+                }
+
+                // The caller's files go to the blob store; the row keeps a reference. Skipped when no store.
+                if (turnInput is not null && http.RequestServices.GetService<IBlobStore>() is { } blobs)
+                {
+                    turnInput = await InboundFiles.FileAsync(blobs, conversation.ConversationId, turnInput, cancellationToken).ConfigureAwait(false);
                 }
 
                 // A resume run carries no anchor and the endpoint ignores one: only words name where the turn hangs.
@@ -210,7 +260,7 @@ namespace AgentCore.AspNetCore.Endpoints
                 AgUiContent content = new(run.TurnIndex);
 
                 await AgUiContent.WriteAsync(
-                    AgUiEventStream.EventsAsync(conversation, run.Updates, ids, context, shown, content, cancellationToken),
+                    AgUiEventStream.EventsAsync(conversation, run.Updates, ids, context, shown, content, name => AgUiFileRefs.RefOf(http.Request, conversation.ConversationId, name), cancellationToken),
                     http.Response.Body,
                     content,
                     cancellationToken).ConfigureAwait(false);
@@ -228,6 +278,44 @@ namespace AgentCore.AspNetCore.Endpoints
                 await conversation.Busy.ExitRequestAsync().ConfigureAwait(false);
             }
         }
+        /// <summary>
+        /// Puts the stored user row's files back in place of the body's bytes, when <paramref name="named"/>
+        /// names a stored user row of this conversation and the body carries the same count of media parts.
+        /// Anything else (a new message id, an edit that swaps files) keeps the body's bytes for the normal
+        /// file path. Text still comes from the body; only the file parts stand in.
+        /// </summary>
+        private static async ValueTask<ChatMessage> StandInStoredFilesAsync(
+            ChatMessage words, string named, string threadId, IConversations conversations, CancellationToken cancellationToken)
+        {
+            StoredConversation? stored = await conversations.LoadWindowAsync(threadId, new TranscriptWindow(null, int.MaxValue), cancellationToken).ConfigureAwait(false);
+            if (stored?.Messages.FirstOrDefault(r => r.MessageId == named && r.Content.Role == ChatRole.User) is not { } row)
+            {
+                return words;
+            }
+
+            List<FileContent> files = [.. row.Content.Contents.OfType<FileContent>()];
+            if (files.Count == 0 || files.Count != words.Contents.Count(c => c is DataContent))
+            {
+                return words;
+            }
+
+            int file = 0;
+            List<AIContent> contents = [];
+            foreach (AIContent content in words.Contents)
+            {
+                contents.Add(content is DataContent ? files[file++] : content);
+            }
+
+            return new ChatMessage(words.Role, contents)
+            {
+                AuthorName = words.AuthorName,
+                MessageId = words.MessageId,
+                CreatedAt = words.CreatedAt,
+                AdditionalProperties = words.AdditionalProperties,
+                RawRepresentation = words.RawRepresentation,
+            };
+        }
+
 
         private static JsonSerializerOptions BuildJson()
         {
