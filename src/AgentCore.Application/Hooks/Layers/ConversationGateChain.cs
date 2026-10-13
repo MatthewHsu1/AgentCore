@@ -40,7 +40,7 @@ namespace AgentCore.Application.Hooks.Layers
             }
 
             HookScope scope = HookScopes.ForGate(offer.ConversationId, offer.Entry, hooks.Timers.GetUtcNow());
-            
+
             bool refused = await hooks.Gates.RunAsync(
                 GatePoint.BeforeConversation,
                 scope,

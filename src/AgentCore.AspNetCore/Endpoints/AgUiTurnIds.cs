@@ -93,7 +93,7 @@ namespace AgentCore.AspNetCore.Endpoints
             ArgumentNullException.ThrowIfNull(input);
 
             string? lastUser = input.Messages.LastOrDefault(m => m is AGUIUserMessage)?.Id;
-            
+
             if (input.ForwardedProperties is not { ValueKind: JsonValueKind.Object } forwarded
                 || !forwarded.TryGetProperty("agentcore", out JsonElement agentcore)
                 || agentcore.ValueKind != JsonValueKind.Object)

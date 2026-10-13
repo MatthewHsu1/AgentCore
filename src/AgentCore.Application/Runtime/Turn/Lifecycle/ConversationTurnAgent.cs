@@ -166,7 +166,7 @@ namespace AgentCore.Application.Runtime.Turn.Lifecycle
                 IReadOnlyList<ChatMessage> ran = TurnMessages.ToolPairs(after.Rows);
 
                 IReadOnlySet<string> asked = TurnApprovalAnswers.Withdrawn(_history, turn.HistorySession, origin);
-                
+
                 WithdrawnTurns? withdrawn = _history.CanTruncateFrom(turn.HistorySession, origin.ParentMessageId)
                     ? await _history.TruncateFromAsync(turn.HistorySession, origin.ParentMessageId, cancellationToken).ConfigureAwait(false)
                     : await _history.CutUnderSummaryAsync(turn.HistorySession, origin.ParentMessageId, cancellationToken).ConfigureAwait(false);

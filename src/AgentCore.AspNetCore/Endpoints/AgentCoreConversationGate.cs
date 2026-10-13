@@ -27,7 +27,7 @@ namespace AgentCore.AspNetCore.Endpoints
             ArgumentNullException.ThrowIfNull(http);
 
             Endpoint? endpoint = http.GetEndpoint();
-            
+
             ConversationOffer offer = new(
                 http.User.Identity?.IsAuthenticated == true ? http.User : null,
                 http.Request.Headers.ToFrozenDictionary(static header => header.Key, static header => string.Join(',', header.Value.ToArray()), StringComparer.OrdinalIgnoreCase),

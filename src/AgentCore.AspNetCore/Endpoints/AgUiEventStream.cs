@@ -160,7 +160,7 @@ namespace AgentCore.AspNetCore.Endpoints
                 foreach (TurnStreamPart part in TurnStreamParts.From(update, names))
                 {
                     content.Note(part);
-                    
+
                     if (part.Member is TurnStreamPart.Compaction)
                     {
                         yield return new ChatResponseUpdate { RawRepresentation = content.ActivityFor(part) };
