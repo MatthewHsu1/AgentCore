@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AgentCore.Application.Blobs;
@@ -19,9 +20,16 @@ namespace AgentCore.AspNetCore.Endpoints;
 /// id across turns, because an approved call's result is written by the turn after the one that asked.
 /// An approval splits the reply in two, as the live stream does: the asking turn stores the request (shown as the
 /// tool call), and the resuming turn re-stores the same call, which is skipped there.
+/// One read answers the newest <c>limit</c> turns before the <c>before</c> cursor; <c>nextCursor</c> asks for the next older page.
 /// </summary>
 internal static class AgUiTurnHistory
 {
+    /// <summary>How many turns a page holds when the caller names no limit.</summary>
+    public const int DefaultTurns = 30;
+
+    /// <summary>The most turns one page holds, whatever the caller asked for.</summary>
+    public const int MaxTurns = 100;
+
     public static IEndpointConventionBuilder MapAgUiTurnHistory(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -30,14 +38,28 @@ internal static class AgUiTurnHistory
         // request inside the ownership gate. No AgUi route metadata: the startup entry check only
         // walks tagged routes.
         return endpoints.MapGet("/agui/threads/{threadId}/turns", async (
-            HttpContext http, string threadId, IConversations conversations, CancellationToken ct) =>
+            HttpContext http, string threadId, string? before, int? limit, IConversations conversations, CancellationToken ct) =>
         {
             if (!await AgUiFileRefs.OwnedAsync(http, threadId, ct).ConfigureAwait(false))
             {
                 return Results.NotFound();
             }
 
-            if (await conversations.LoadWindowAsync(threadId, new TranscriptWindow(null, 100), ct).ConfigureAwait(false) is not { } stored)
+            int? beforeTurn = null;
+            if (before is not null)
+            {
+                if (!int.TryParse(before, NumberStyles.None, CultureInfo.InvariantCulture, out int turnIndex))
+                {
+                    return Results.Problem(
+                        $"'{before}' is not a cursor. Send back the nextCursor a page answered with, or nothing at all.",
+                        statusCode: StatusCodes.Status400BadRequest);
+                }
+
+                beforeTurn = turnIndex;
+            }
+
+            TranscriptWindow window = new(beforeTurn, Math.Clamp(limit ?? DefaultTurns, 1, MaxTurns));
+            if (await conversations.LoadWindowAsync(threadId, window, ct).ConfigureAwait(false) is not { } stored)
             {
                 return Results.NotFound();
             }
@@ -172,7 +194,9 @@ internal static class AgUiTurnHistory
                 messages.Add(reply);
             }
 
-            return Results.Text(new JsonObject { ["messages"] = messages }.ToJsonString(), "application/json");
+            return Results.Text(
+                new JsonObject { ["messages"] = messages, ["nextCursor"] = stored.OlderBefore?.ToString(CultureInfo.InvariantCulture) }.ToJsonString(),
+                "application/json");
         });
     }
 

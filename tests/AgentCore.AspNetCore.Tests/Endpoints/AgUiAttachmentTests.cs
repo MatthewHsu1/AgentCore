@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using AgentCore.Application.Blobs;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
 using AgentCore.Application.Transcript;
@@ -294,5 +295,51 @@ public sealed class AgUiAttachmentTests
         await host.Services.GetRequiredService<IConversations>().DeleteAsync(thread, Ct);
 
         Assert.Empty(blobs.Store.Blobs);
+    }
+
+    private static async Task KeepAgentFilesAsync(ResponsesHost host, FakeBlobStoreAdapter blobs, string thread, string mediaType, params string[] names)
+    {
+        List<AIContent> files = [];
+        foreach (string name in names)
+        {
+            await blobs.Store.PutAsync(new BlobWrite(thread, name, mediaType, new MemoryStream(Png), Png.Length), Ct);
+            files.Add(new FileContent { Name = name, FileId = "cfile_" + name, MediaType = mediaType, Length = Png.Length, Kept = true });
+        }
+
+        _ = await host.Services.GetRequiredService<IConversationStore>().AppendAsync(thread, [new ConversationMessageDraft(0, new ChatMessage(ChatRole.Assistant, files), "m1")], null, Ct);
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task ReferenceToAnAgentFileOfARefusedType_Is415_ModelNeverRuns()
+    {
+        FakeBlobStoreAdapter blobs = new();
+        using FragmentingChatClient reply = new("seen it");
+        await using ResponsesHost host = await StartAsync(reply, blobs);
+        string thread = await OpenThreadAsync(host, "t-ref-type");
+        await KeepAgentFilesAsync(host, blobs, thread, "text/csv", "report.csv");
+
+        using HttpResponseMessage response = await PostAsync(host.Client, Run(thread, [UserParts("u2", TextPart("read it"), UrlImagePart($"https://host.test/agui/threads/{thread}/files/report.csv"))]));
+        JsonElement only = Assert.Single(await ReadEventsAsync(response));
+
+        Assert.Equal(AgUiAttachments.TypeNotAllowed, only.GetProperty("code").GetString());
+        Assert.Equal(0, reply.Calls);
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task MoreReferencesThanTheCap_Is400TooMany_ModelNeverRuns()
+    {
+        FakeBlobStoreAdapter blobs = new();
+        using FragmentingChatClient reply = new("seen it");
+        await using ResponsesHost host = await StartAsync(reply, blobs);
+        string thread = await OpenThreadAsync(host, "t-ref-many");
+        string[] names = ["a.png", "b.png", "c.png", "d.png", "e.png"];
+        await KeepAgentFilesAsync(host, blobs, thread, "image/png", names);
+
+        JsonObject[] parts = [TextPart("all of them"), .. names.Select(n => UrlImagePart($"https://host.test/agui/threads/{thread}/files/{n}"))];
+        using HttpResponseMessage response = await PostAsync(host.Client, Run(thread, [UserParts("u2", parts)]));
+        JsonElement only = Assert.Single(await ReadEventsAsync(response));
+
+        Assert.Equal(AgUiAttachments.TooMany, only.GetProperty("code").GetString());
+        Assert.Equal(0, reply.Calls);
     }
 }

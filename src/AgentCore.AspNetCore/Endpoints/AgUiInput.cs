@@ -15,14 +15,6 @@ namespace AgentCore.AspNetCore.Endpoints
 
         public const string TooLargeCode = "message_too_large";
 
-        /// <summary>Reads the newest user message that carries words or a file, or null when no turn can run.</summary>
-        public static ChatMessage? LastUserInput(IReadOnlyList<ChatMessage> messages)
-        {
-            ArgumentNullException.ThrowIfNull(messages);
-
-            return AgUiAttachments.LastUserInput(messages);
-        }
-
         /// <summary>Checks the picked message against the per-message size cap.</summary>
         /// <returns>The refusal, or null when the message may run.</returns>
         public static (int Status, string Code, string Message)? CheckSize(ChatMessage message)

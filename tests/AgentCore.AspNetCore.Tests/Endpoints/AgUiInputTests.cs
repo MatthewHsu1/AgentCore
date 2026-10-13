@@ -85,9 +85,9 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
                 new(ChatRole.User, string.Empty),
             ];
 
-            Assert.Equal("new", AgUiInput.LastUserInput(messages)?.Text);
-            Assert.Null(AgUiInput.LastUserInput([new(ChatRole.System, "be brief"), new(ChatRole.Assistant, "hi")]));
-            Assert.Null(AgUiInput.LastUserInput([new(ChatRole.User, string.Empty)]));
+            Assert.Equal("new", AgUiAttachments.LastUserInput(messages)?.Text);
+            Assert.Null(AgUiAttachments.LastUserInput([new(ChatRole.System, "be brief"), new(ChatRole.Assistant, "hi")]));
+            Assert.Null(AgUiAttachments.LastUserInput([new(ChatRole.User, string.Empty)]));
         }
 
         [Fact]

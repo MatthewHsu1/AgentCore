@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using AgentCore.Application.Conversation;
 using AgentCore.Application.Ports;
@@ -51,9 +52,15 @@ namespace AgentCore.AspNetCore.Endpoints
             ArgumentException.ThrowIfNullOrEmpty(pattern);
 
             IEndpointConventionBuilder run = endpoints.MapPost(pattern, HandleAsync).WithMetadata(AgentCoreRouteMetadata.AgUi);
-            _ = endpoints.MapAgUiFileLink();
-            _ = endpoints.MapAgUiFileDoor();
-            _ = endpoints.MapAgUiTurnHistory();
+
+            // The thread routes name no entry, so a second MapAgUi on the same builder would map them twice and make every request ambiguous.
+            if (ThreadRoutesMapped.TryAdd(endpoints, new object()))
+            {
+                _ = endpoints.MapAgUiFileLink();
+                _ = endpoints.MapAgUiFileDoor();
+                _ = endpoints.MapAgUiTurnHistory();
+            }
+
             return run;
         }
 
@@ -112,7 +119,7 @@ namespace AgentCore.AspNetCore.Endpoints
             // The client resends the whole thread every run; the conversation already holds it, so only the newest words count.
             // Beside a resume, only words sent after the interrupted message count (assistant-ui's steerAway).
             ChatMessage? words = resume.Count == 0
-                ? AgUiInput.LastUserInput(context.Messages)
+                ? AgUiAttachments.LastUserInput(context.Messages)
                 : AgUiApprovals.WordsBeside(input, context.Messages);
 
             if (resume.Count == 0 && words is null)
@@ -326,5 +333,7 @@ namespace AgentCore.AspNetCore.Endpoints
         }
 
         private static readonly JsonSerializerOptions Json = BuildJson();
+
+        private static readonly ConditionalWeakTable<IEndpointRouteBuilder, object> ThreadRoutesMapped = new();
     }
 }

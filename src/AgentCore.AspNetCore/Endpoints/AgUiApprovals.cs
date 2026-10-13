@@ -42,7 +42,7 @@ namespace AgentCore.AspNetCore.Endpoints
             ArgumentNullException.ThrowIfNull(messages);
 
             return input.Messages.LastOrDefault() is AGUIUserMessage
-                ? AgUiInput.LastUserInput([.. messages])
+                ? AgUiAttachments.LastUserInput([.. messages])
                 : null;
         }
 

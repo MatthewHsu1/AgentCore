@@ -1,3 +1,4 @@
+using AgentCore.Application.Transcript;
 using Microsoft.Extensions.AI;
 
 namespace AgentCore.AspNetCore.Endpoints;
@@ -70,6 +71,14 @@ internal static class AgUiAttachments
                     parts++;
                     break;
                 case UriContent:
+                    parts++;
+                    break;
+                case FileContent file when !Allowed(file.MediaType, limits):
+                    return (415, TypeNotAllowed, $"'{file.MediaType}' is not an accepted attachment type.");
+                case FileContent file when file.Length > limits.MaxPartBytes:
+                    return (413, TooLarge, $"'{file.Title ?? file.Name}' is {file.Length} bytes; the limit is {limits.MaxPartBytes}.");
+                case FileContent file:
+                    total += file.Length;
                     parts++;
                     break;
             }
