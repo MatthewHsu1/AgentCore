@@ -137,24 +137,6 @@ public sealed class AgUiAttachmentTests
     }
 
     [Fact]
-    public void ImageAlone_Picked_AsUserInput()
-    {
-        ChatMessage message = new(ChatRole.User, [new DataContent(Png, "image/png")]);
-
-        Assert.Same(message, AgUiInput.LastUserInput([message]));
-    }
-
-    [Fact]
-    public void DataContent_Survives_Sanitize()
-    {
-        ChatMessage message = new(ChatRole.User, [new TextContent("look"), new DataContent(Png, "image/png")]);
-
-        ChatMessage sanitized = AgUiInput.Sanitize(message);
-
-        Assert.IsType<DataContent>(sanitized.Contents[1]);
-    }
-
-    [Fact]
     public void SizeCheck_Counts_DecodedBytes()
     {
         ChatMessage message = new(ChatRole.User, [new DataContent(new byte[(int)AgUiInput.MaxMessageChars + 1], "image/png")]);

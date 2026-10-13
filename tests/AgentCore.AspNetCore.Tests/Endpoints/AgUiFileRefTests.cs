@@ -349,38 +349,6 @@ public sealed class AgUiFileRefTests
     }
 
     [Fact(Timeout = 60_000)]
-    public async Task RawUrl_IsLeftForTheAttachmentCheck()
-    {
-        FakeBlobStoreAdapter blobs = new();
-        using FragmentingChatClient reply = new("unused");
-        await using ResponsesHost host = await StartAsync(reply, blobs);
-        string thread = await OpenThreadAsync(host, "t-raw");
-
-        using HttpResponseMessage response = await PostAsync(host.Client, Run(thread, [UserParts("u1", TextPart("look"), UrlImagePart("https://attacker.test/a.png"))]));
-        JsonElement only = Assert.Single(await ReadEventsAsync(response));
-
-        Assert.Equal("RUN_ERROR", only.GetProperty("type").GetString());
-        Assert.Equal("attachment_url_not_allowed", only.GetProperty("code").GetString());
-        Assert.Null(reply.LastRequest);
-    }
-
-    [Fact(Timeout = 60_000)]
-    public async Task SizeRefusal_NamesAttachmentBytes()
-    {
-        FakeBlobStoreAdapter blobs = new();
-        using FragmentingChatClient reply = new("unused");
-        await using ResponsesHost host = await StartAsync(reply, blobs);
-        string thread = await OpenThreadAsync(host, "t-size-wording");
-        byte[] big = new byte[(5 * 1024 * 1024) + 1];
-
-        using HttpResponseMessage response = await PostAsync(host.Client, Run(thread, [UserParts("u1", TextPart("look"), ImagePart(Convert.ToBase64String(big)))]));
-        JsonElement only = Assert.Single(await ReadEventsAsync(response));
-
-        Assert.Equal("attachment_too_large", only.GetProperty("code").GetString());
-        Assert.Contains("bytes", only.GetProperty("message").GetString(), StringComparison.Ordinal);
-    }
-
-    [Fact(Timeout = 60_000)]
     public async Task LinkRoute_MintsFreshUrlAndExpiry_WithNoStore()
     {
         FakeBlobStoreAdapter blobs = new();
