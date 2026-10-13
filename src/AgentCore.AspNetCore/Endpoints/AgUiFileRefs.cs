@@ -236,25 +236,31 @@ internal static class AgUiFileRefs
         });
     }
 
-    /// <summary>Runs the G-7 ownership hook for one thread-scoped request: unknown or refused reads as not found.</summary>
+    /// <summary>
+    /// Runs the entry gate and the G-7 ownership hook for one thread-scoped request, as a turn of the entry that last
+    /// ran the conversation would. A conversation that kept no entry falls back to a hook's pick or the one declared
+    /// entry. Unknown or refused reads as not found.
+    /// </summary>
     internal static async ValueTask<bool> OwnedAsync(HttpContext http, string threadId, CancellationToken ct)
     {
+        if (await http.RequestServices.GetRequiredService<IConversations>().GetAsync(threadId, ct).ConfigureAwait(false) is not { } record)
+        {
+            return false;
+        }
+
+        string? stored = record.State?.Entry;
+        if (stored is not null)
+        {
+            http.Request.RouteValues[ResponsesEndpointRouteBuilderExtensions.EntryRouteParameter] = stored;
+        }
+
         string? entry = await AgentCoreEntries.ResolveAsync(http, ct).ConfigureAwait(false);
-        if (entry is null && http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries.Entries is { Count: 1 } declared)
+        if (entry is null && stored is null && http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries.Entries is { Count: 1 } declared)
         {
             entry = declared.First();
         }
 
-        if (entry is null)
-        {
-            return false;
-        }
-
-        if (await http.RequestServices.GetRequiredService<IConversations>().GetAsync(threadId, ct).ConfigureAwait(false) is null)
-        {
-            return false;
-        }
-
-        return await AgentCoreConversationGate.AllowAsync(http, entry, threadId, resuming: false, ct).ConfigureAwait(false);
+        return entry is not null
+            && await AgentCoreConversationGate.AllowAsync(http, entry, threadId, resuming: false, ct).ConfigureAwait(false);
     }
 }

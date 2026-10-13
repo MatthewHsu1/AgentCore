@@ -28,6 +28,12 @@ namespace AgentCore.Application.Conversation
         /// <summary>Gets the index the conversation's next turn takes.</summary>
         public int NextTurnIndex { get; init; }
 
+        /// <summary>
+        /// Gets the entry whose turn wrote this state, or <see langword="null"/> in a blob written before the entry was kept.
+        /// A request that names the conversation but no entry runs its gates as this entry.
+        /// </summary>
+        public string? Entry { get; init; }
+
         /// <summary>Gets the stage the machine held. It is empty when the document declares no policy.</summary>
         public string Stage { get; init; } = string.Empty;
 

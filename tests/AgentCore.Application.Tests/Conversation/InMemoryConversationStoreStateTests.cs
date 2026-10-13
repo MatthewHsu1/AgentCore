@@ -22,6 +22,12 @@ namespace AgentCore.Application.Tests.Conversation
         }
 
         [Fact]
+        public Task Append_KeepsTheEntryOfTheState()
+        {
+            return ConversationStoreStateFacts.TheEntryATurnWroteIsKept(new InMemoryConversationStore(), Token);
+        }
+
+        [Fact]
         public Task SaveState_OfAConversationWithNoRow_LeavesItAlone()
         {
             return ConversationStoreStateFacts.AConversationWithNoRowIsLeftAlone(new InMemoryConversationStore(), Token);

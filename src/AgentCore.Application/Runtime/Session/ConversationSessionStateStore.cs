@@ -119,6 +119,7 @@ namespace AgentCore.Application.Runtime.Session
 
                 return new()
                 {
+                    Entry = _session.Compiled.EntryName,
                     Stage = _session.State.Stage,
                     IsComplete = _session.IsComplete,
                     Slots = _session.State.WrittenSlots(),

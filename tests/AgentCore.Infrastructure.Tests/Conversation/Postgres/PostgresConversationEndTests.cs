@@ -67,6 +67,12 @@ namespace AgentCore.Infrastructure.Tests.Conversation.Postgres
         }
 
         [PostgresFact]
+        public Task Append_KeepsTheEntryOfTheState()
+        {
+            return ConversationStoreStateFacts.TheEntryATurnWroteIsKept(Store, Token);
+        }
+
+        [PostgresFact]
         public Task SaveState_OfAConversationWithNoRow_LeavesItAlone()
         {
             return ConversationStoreStateFacts.AConversationWithNoRowIsLeftAlone(Store, Token);

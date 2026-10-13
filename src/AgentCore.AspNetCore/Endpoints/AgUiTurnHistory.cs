@@ -58,7 +58,9 @@ internal static class AgUiTurnHistory
                 beforeTurn = turnIndex;
             }
 
-            TranscriptWindow window = new(beforeTurn, Math.Clamp(limit ?? DefaultTurns, 1, MaxTurns));
+            // One turn past each edge of the page: an approval's asking turn and its resuming turn may straddle it.
+            int turns = Math.Clamp(limit ?? DefaultTurns, 1, MaxTurns);
+            TranscriptWindow window = new(beforeTurn is { } edge ? Math.Min(edge, int.MaxValue - 1) + 1 : null, turns + 2);
             if (await conversations.LoadWindowAsync(threadId, window, ct).ConfigureAwait(false) is not { } stored)
             {
                 return Results.NotFound();
@@ -66,6 +68,8 @@ internal static class AgUiTurnHistory
 
             HttpRequest request = http.Request;
             List<ConversationMessage> rows = [.. stored.Messages.OrderBy(r => r.Ordinal)];
+            List<int> below = [.. rows.Select(r => r.TurnIndex).Distinct().Where(t => beforeTurn is not { } edge || t < edge).Order()];
+            HashSet<int> page = [.. below.TakeLast(turns)];
             Dictionary<string, object?> results = rows
                 .SelectMany(r => r.Content.Contents.OfType<FunctionResultContent>())
                 .GroupBy(r => r.CallId)
@@ -76,6 +80,7 @@ internal static class AgUiTurnHistory
             JsonArray messages = [];
             foreach (IGrouping<int, ConversationMessage> turn in rows.GroupBy(r => r.TurnIndex))
             {
+                bool shown = page.Contains(turn.Key);
                 JsonArray parts = [];
                 string? userId = null;
                 foreach (ConversationMessage row in turn)
@@ -87,7 +92,7 @@ internal static class AgUiTurnHistory
                         JsonArray said = [.. message.Contents.OfType<TextContent>().Where(t => t.Text.Length > 0)
                             .Select(t => (JsonNode)new JsonObject { ["type"] = "text", ["text"] = t.Text })];
                         JsonArray attachments = Attachments(message, request, threadId);
-                        if (said.Count > 0 || attachments.Count > 0)
+                        if (shown && (said.Count > 0 || attachments.Count > 0))
                         {
                             messages.Add(new JsonObject
                             {
@@ -155,7 +160,7 @@ internal static class AgUiTurnHistory
                     }
                 }
 
-                if (parts.Count == 0)
+                if (!shown || parts.Count == 0)
                 {
                     continue;
                 }
@@ -195,7 +200,7 @@ internal static class AgUiTurnHistory
             }
 
             return Results.Text(
-                new JsonObject { ["messages"] = messages, ["nextCursor"] = stored.OlderBefore?.ToString(CultureInfo.InvariantCulture) }.ToJsonString(),
+                new JsonObject { ["messages"] = messages, ["nextCursor"] = below.Count > turns ? page.Min().ToString(CultureInfo.InvariantCulture) : null }.ToJsonString(),
                 "application/json");
         });
     }

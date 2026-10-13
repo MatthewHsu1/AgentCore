@@ -142,4 +142,55 @@ public sealed class AgUiTurnPagingTests
 
         Assert.Equal([AgUiTurnIds.TurnMessageId(0)], TurnIds(page));
     }
+
+    [Theory(Timeout = 60_000)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task ApprovalPairStraddlingAPageEdge_ShowsTheCallOnce_WithItsResult(int askingTurn)
+    {
+        using FragmentingChatClient reply = new("unused");
+        await using ResponsesHost host = await StartWithTurnsAsync(reply, "t-straddle", 0);
+        IConversationStore store = host.Services.GetRequiredService<IConversationStore>();
+        FunctionCallContent call = new("c1", "send_email", new Dictionary<string, object?> { ["to"] = "a@b.c" });
+        for (int k = 0; k < 4; k++)
+        {
+            List<ConversationMessageDraft> rows = [new(k, new ChatMessage(ChatRole.User, $"q{k}"), $"u{k}")];
+            if (k == askingTurn)
+            {
+                rows.Add(new(k, new ChatMessage(ChatRole.Assistant, [new ToolApprovalRequestContent("req1", call)]), $"a{k}"));
+            }
+            else if (k == askingTurn + 1)
+            {
+                rows.Add(new(k, new ChatMessage(ChatRole.Assistant, [call]), $"c{k}"));
+                rows.Add(new(k, new ChatMessage(ChatRole.Tool, [new FunctionResultContent("c1", "sent")]), $"t{k}"));
+                rows.Add(new(k, new ChatMessage(ChatRole.Assistant, "done"), $"a{k}"));
+            }
+            else
+            {
+                rows.Add(new(k, new ChatMessage(ChatRole.Assistant, $"a{k}"), $"a{k}"));
+            }
+
+            _ = await store.AppendAsync("t-straddle", rows, null, Ct);
+        }
+
+        List<JsonNode> calls = [];
+        string query = "?limit=1";
+        while (true)
+        {
+            JsonNode page = await PageAsync(host.Client, "t-straddle", query);
+            calls.AddRange(page["messages"]!.AsArray()
+                .SelectMany(m => m!["content"] is JsonArray parts ? parts : [])
+                .Where(p => p!["type"]?.GetValue<string>() == "tool-call")!);
+            if (page["nextCursor"]?.GetValue<string>() is not { } cursor)
+            {
+                break;
+            }
+
+            query = $"?limit=1&before={cursor}";
+        }
+
+        JsonNode only = Assert.Single(calls);
+        Assert.Equal("c1", only["toolCallId"]!.GetValue<string>());
+        Assert.Equal("sent", only["result"]!.GetValue<string>());
+    }
 }

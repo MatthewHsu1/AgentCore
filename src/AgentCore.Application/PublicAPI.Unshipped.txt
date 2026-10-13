@@ -76,6 +76,8 @@ AgentCore.Application.Conversation.ConversationSessionState.Providers.get -> Sys
 AgentCore.Application.Conversation.ConversationSessionState.Providers.init -> void
 AgentCore.Application.Conversation.ConversationSessionState.Slots.get -> System.Collections.Generic.IReadOnlyDictionary<string!, System.Text.Json.Nodes.JsonNode?>!
 AgentCore.Application.Conversation.ConversationSessionState.Slots.init -> void
+AgentCore.Application.Conversation.ConversationSessionState.Entry.get -> string?
+AgentCore.Application.Conversation.ConversationSessionState.Entry.init -> void
 AgentCore.Application.Conversation.ConversationSessionState.Stage.get -> string!
 AgentCore.Application.Conversation.ConversationSessionState.Stage.init -> void
 AgentCore.Application.Conversation.ConversationSessionState.Version.get -> int
