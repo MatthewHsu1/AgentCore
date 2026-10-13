@@ -272,6 +272,7 @@ namespace AgentCore.AspNetCore.DependencyInjection
                         Clock = _options.TimeProvider,
                         Hooks = hooks,
                         Secrets = secrets,
+                        Blobs = blobs,
                     })
                 .ConfigureAwait(false);
 

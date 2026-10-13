@@ -151,6 +151,12 @@ namespace AgentCore.Application.Runtime.Agents
                         ? TurnApprovalAnswers.MovedOn(userInput, open)
                         : userInput;
 
+                if (origin?.MessageId is { } messageId && string.IsNullOrEmpty(spoken.MessageId))
+                {
+                    spoken = spoken.Clone();
+                    spoken.MessageId = messageId;
+                }
+
                 _session.History.BeginTurn(session, _session.State.TurnIndex);
 
                 activity = AgentCoreTelemetry.StartTurn(_session.ConversationId, _session.State.TurnIndex, _session.State.Stage);

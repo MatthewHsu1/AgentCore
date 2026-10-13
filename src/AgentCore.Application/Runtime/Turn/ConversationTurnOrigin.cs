@@ -13,5 +13,11 @@ namespace AgentCore.Application.Runtime.Turn
     {
         /// <summary>Gets whether the caller answered for where this turn hangs.</summary>
         public required bool NamesParent { get; init; }
+
+        /// <summary>
+        /// Gets whether the turn keeps the withdrawn tool calls and results even when its message id
+        /// is new.
+        /// </summary>
+        public bool KeepsWithdrawnTools { get; init; }
     }
 }

@@ -6,8 +6,10 @@ namespace AgentCore.Hosting
     /// <param name="Health">The liveness check.</param>
     /// <param name="Responses">The OpenAI-compatible Responses endpoint.</param>
     /// <param name="Call">The conversation socket.</param>
+    /// <param name="AgUi">The AG-UI endpoint.</param>
     public sealed record AgentCoreEndpoints(
         IEndpointConventionBuilder Health,
         IEndpointConventionBuilder Responses,
-        IEndpointConventionBuilder Call);
+        IEndpointConventionBuilder Call,
+        IEndpointConventionBuilder AgUi);
 }

@@ -60,7 +60,7 @@ namespace AgentCore.Application.Configuration.Compilation
                     + "adapter's table.");
             }
 
-            providers.Add(new ReaderContentFilterProvider());
+            providers.Add(new ReaderContentFilterProvider(context.Blobs));
 
             CompactionStages stages = context.Compaction ?? CompactionStrategyFactory.Create(context.ChatClients.GetChatClient(model), contextWindow);
             providers.AddRange(CompactionStrategyFactory.BuildProviders(stages, history, walk.Hooks));

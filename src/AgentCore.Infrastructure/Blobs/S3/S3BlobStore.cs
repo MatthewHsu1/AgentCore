@@ -114,7 +114,7 @@ namespace AgentCore.Infrastructure.Blobs.S3
                 ResponseHeaderOverrides =
                 {
                     ContentType = blob.MediaType,
-                    ContentDisposition = BlobLink.DispositionOf(blob.MediaType, blob.Name),
+                    ContentDisposition = BlobLink.DispositionOf(blob.MediaType, blob.DownloadName ?? blob.Name),
                 },
             };
 

@@ -51,6 +51,26 @@ namespace AgentCore.AspNetCore.Tests.Endpoints
         }
 
         [Fact]
+        public void Resolve_WithoutTheStore_ListsKeptFilesWithPlainNames_LatestFactsWin()
+        {
+            // Arrange: a refused file, a path-like name, and the same file noted twice.
+            TurnStreamFiles files = new();
+            FileContent later = Kept("chart.png", "image/png", 2);
+            later.Title = "Chart";
+            files.Note(UpdateWith(Kept("chart.png", "image/png", 1), Kept("../escape.png", "image/png", 3), new FileContent { Name = "refused.png", FileId = "cfile_2" }));
+            files.Note(UpdateWith(later));
+
+            // Act
+            TurnStreamPart part = Assert.Single(files.Resolve());
+
+            // Assert
+            FilePayload payload = Assert.IsType<FilePayload>(part.Payload);
+            Assert.Equal("chart.png", payload.Name);
+            Assert.Equal("Chart", payload.Title);
+            Assert.Equal(2, payload.Length);
+        }
+
+        [Fact]
         public void Resolve_NothingNoted_YieldsNothing()
         {
             // Arrange

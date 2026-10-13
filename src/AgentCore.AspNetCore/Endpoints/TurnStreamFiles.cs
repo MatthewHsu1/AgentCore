@@ -41,5 +41,40 @@ namespace AgentCore.AspNetCore.Endpoints
                 });
             }
         }
+
+        /// <summary>Lists every noted kept file, in first-seen order, without asking the store.</summary>
+        /// <returns>One part for each noted file the store kept.</returns>
+        internal IEnumerable<TurnStreamPart> Resolve()
+        {
+            List<FileContent> kept = [];
+            foreach (FileContent file in _files)
+            {
+                if (!file.Kept || !BlobName.IsSafe(file.Name))
+                {
+                    continue;
+                }
+
+                int at = kept.FindIndex(known => string.Equals(known.Name, file.Name, StringComparison.Ordinal));
+                if (at >= 0)
+                {
+                    kept[at] = file;
+                }
+                else
+                {
+                    kept.Add(file);
+                }
+            }
+
+            foreach (FileContent file in kept)
+            {
+                yield return new TurnStreamPart(TurnStreamPart.File, new FilePayload
+                {
+                    Name = file.Name,
+                    Title = file.Title,
+                    MediaType = file.MediaType,
+                    Length = file.Length,
+                });
+            }
+        }
     }
 }

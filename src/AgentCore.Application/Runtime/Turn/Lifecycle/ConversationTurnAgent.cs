@@ -161,8 +161,12 @@ namespace AgentCore.Application.Runtime.Turn.Lifecycle
             IReadOnlyList<ChatMessage> carried = [];
             if (turn.Invocation.Origin is { NamesParent: true } origin)
             {
-                IReadOnlyList<ChatMessage> ran = TurnMessages.ToolPairs(_history.RowsAfter(turn.HistorySession, origin.ParentMessageId).Rows);
+                (IReadOnlyList<ChatMessage> Rows, bool _) after = _history.RowsAfter(turn.HistorySession, origin.ParentMessageId);
+
+                IReadOnlyList<ChatMessage> ran = TurnMessages.ToolPairs(after.Rows);
+
                 IReadOnlySet<string> asked = TurnApprovalAnswers.Withdrawn(_history, turn.HistorySession, origin);
+
                 WithdrawnTurns? withdrawn = _history.CanTruncateFrom(turn.HistorySession, origin.ParentMessageId)
                     ? await _history.TruncateFromAsync(turn.HistorySession, origin.ParentMessageId, cancellationToken).ConfigureAwait(false)
                     : await _history.CutUnderSummaryAsync(turn.HistorySession, origin.ParentMessageId, cancellationToken).ConfigureAwait(false);
@@ -170,7 +174,7 @@ namespace AgentCore.Application.Runtime.Turn.Lifecycle
                 if (withdrawn is { } taken)
                 {
                     turn.Completer.Superseded(taken);
-                    carried = ran;
+                    carried = Resent(origin, after.Rows) ? ran : [];
                     PendingApprovalQueue.Withdraw(turn.HistorySession, asked);
                 }
             }
@@ -181,6 +185,18 @@ namespace AgentCore.Application.Runtime.Turn.Lifecycle
                     : messages;
 
             return (carried.Count == 0 ? request : [.. request, .. carried], carried);
+        }
+
+        /// <summary>
+        /// Whether the turn resends the user message it withdraws, rather than editing it. The rows are
+        /// <see cref="ChatMessage"/>s read off the live history, so a resent id is a user row of the
+        /// withdrawn span whose message id matches; the phone call keeps withdrawn tools on every ask.
+        /// </summary>
+        private static bool Resent(ConversationTurnOrigin origin, IReadOnlyList<ChatMessage> withdrawn)
+        {
+            return origin.KeepsWithdrawnTools
+                || (origin.MessageId is { } messageId
+                    && withdrawn.Any(row => row.Role == ChatRole.User && row.MessageId == messageId));
         }
 
         /// <summary>Seals the turn: decide it, write it once, and raise its events.</summary>

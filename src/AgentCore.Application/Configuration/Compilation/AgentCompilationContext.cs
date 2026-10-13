@@ -97,6 +97,10 @@ namespace AgentCore.Application.Configuration.Compilation
         /// <see cref="Runtime.Session.ConversationSessionFactory"/> hears notices but runs no gate.
         /// </summary>
         public IReadOnlyList<AgentHook>? Hooks { get; init; }
+        /// <summary>
+        /// Gets or sets the store inbound caller files are filed in, or <see langword="null"/> when the document names none.
+        /// </summary>
+        public IBlobStore? Blobs { get; init; }
 
         /// <summary>
         /// Gets or sets the compaction stages every agent runs.

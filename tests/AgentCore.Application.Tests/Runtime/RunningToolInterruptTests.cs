@@ -58,7 +58,7 @@ namespace AgentCore.Application.Tests.Runtime
             tool.Release.SetResult();
             await session.ToolRuns.WhenIdle();
 
-            TurnResult newer = await session.RunTurnAtOriginAsync(Combined, new ConversationTurnOrigin("d2", anchor) { NamesParent = true }, Ct);
+            TurnResult newer = await session.RunTurnAtOriginAsync(Combined, new ConversationTurnOrigin("d2", anchor) { NamesParent = true, KeepsWithdrawnTools = true }, Ct);
             await session.FlushNoticesAsync();
 
             Assert.Equal((1, 1), (tool.Runs, tool.Finished));

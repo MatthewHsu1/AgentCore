@@ -33,6 +33,11 @@
     <PackageVersion Include="ModelContextProtocol.Core" Version="2.2.0" />
   </ItemGroup>
   <ItemGroup>
+    <PackageVersion Include="AGUI.Abstractions" Version="1.0.0" />
+    <PackageVersion Include="AGUI.Formatting" Version="1.0.0" />
+    <PackageVersion Include="AGUI.Server" Version="1.0.0" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageVersion Include="OpenAI" Version="2.13.0" />
   </ItemGroup>
   <ItemGroup>

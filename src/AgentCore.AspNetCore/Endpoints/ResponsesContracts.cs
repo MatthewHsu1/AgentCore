@@ -230,6 +230,9 @@ namespace AgentCore.AspNetCore.Endpoints
 
         /// <summary>Gets how many bytes it holds.</summary>
         public required long Length { get; init; }
+
+        /// <summary>Gets the absolute file-door reference the browser holds, or <see langword="null"/> off the AG-UI route.</summary>
+        public string? Ref { get; init; }
     }
 
     /// <summary>The ids one turn's commit wrote, as the browser reads it.</summary>
