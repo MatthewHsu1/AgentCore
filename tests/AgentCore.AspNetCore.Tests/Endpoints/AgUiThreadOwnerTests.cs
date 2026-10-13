@@ -14,9 +14,9 @@ using Xunit;
 namespace AgentCore.AspNetCore.Tests.Endpoints;
 
 /// <summary>
-/// The thread routes (file door, link, turns) name no entry. On a host with several entries and no
-/// <c>BeforeEntry</c> hook they run the ownership gate as the entry that ran the conversation, so its owner
-/// opens them and anyone else sees nothing.
+/// The thread routes (file door, link, turns) name no entry. On a host with several entries, its
+/// <c>BeforeEntry</c> hook picks the entry and the ownership gate runs as that entry, so the conversation's
+/// owner opens them and anyone else sees nothing.
 /// </summary>
 public sealed class AgUiThreadOwnerTests
 {
@@ -110,7 +110,7 @@ public sealed class AgUiThreadOwnerTests
     }
 
     [Fact(Timeout = 60_000)]
-    public async Task Owner_OpensDoorLinkAndTurns_GatedAsTheEntryThatRanIt()
+    public async Task Owner_OpensDoorLinkAndTurns_GatedAsTheHookPickedEntry()
     {
         using FragmentingChatClient reply = new("seen it");
         (ResponsesHost host, OwnerOnly gate, string reference) = await StartWithOwnedUploadAsync(reply, "t-owner");
@@ -145,10 +145,16 @@ public sealed class AgUiThreadOwnerTests
         Assert.Equal(HttpStatusCode.NotFound, turns.StatusCode);
     }
 
-    /// <summary>Lets one user touch conversations, and notes the entry every gate ran as.</summary>
+    /// <summary>Picks the entry as a host would from its user, lets one user touch conversations, and notes the entry every gate ran as.</summary>
     private sealed class OwnerOnly(string owner) : AgentHook
     {
         public ConcurrentQueue<string> Entries { get; } = new();
+
+        public override ValueTask BeforeEntryAsync(EntryGate gate, CancellationToken cancellationToken)
+        {
+            gate.Choose("main");
+            return default;
+        }
 
         public override ValueTask BeforeConversationAsync(ConversationGate gate, CancellationToken cancellationToken)
         {

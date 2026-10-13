@@ -39,7 +39,11 @@ namespace AgentCore.AspNetCore.Endpoints
             return endpoints.MapAgUi(DefaultPattern);
         }
 
-        /// <summary>Maps every entry on one route, with the file doors beside it, all behind the G-7 ownership hook.</summary>
+        /// <summary>
+        /// Maps every entry on one route, with the thread routes (file door, link, turns) beside it, all behind the G-7
+        /// ownership hook. The thread routes name no entry: a host that declares two or more entries must supply a
+        /// <see cref="AgentCore.Application.Hooks.AgentHook.BeforeEntryAsync"/> hook that picks the entry, or they answer not found.
+        /// </summary>
         /// <param name="endpoints">The route builder of the host.</param>
         /// <param name="pattern">
         /// The route to answer on. It carries the <c>{entry}</c> parameter, or a hook's

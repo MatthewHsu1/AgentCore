@@ -164,7 +164,7 @@ internal static class AgUiFileRefs
     /// <summary>
     /// <c>GET /agui/threads/{threadId}/files/{name}/link</c>: a fresh link to one stored file, and when it stops working.
     /// A store with no web door answers the reference itself, which the door below serves.
-    /// Behind the G-7 ownership hook, like every other thread route.
+    /// Behind the G-7 ownership hook, like every other thread route. A host that declares two or more entries must supply a BeforeEntry hook that picks the entry, or these routes answer not found.
     /// </summary>
     public static IEndpointConventionBuilder MapAgUiFileLink(this IEndpointRouteBuilder endpoints)
     {
@@ -199,7 +199,7 @@ internal static class AgUiFileRefs
     /// <summary>
     /// <c>GET /agui/threads/{threadId}/files/{name}</c>: the reference itself, so a client that draws it without a swap
     /// still gets the file. A store with a web door redirects to a fresh link; one without streams the bytes.
-    /// Either way the download keeps the caller's file name. Behind the G-7 ownership hook.
+    /// Either way the download keeps the caller's file name. Behind the G-7 ownership hook. A host that declares two or more entries must supply a BeforeEntry hook that picks the entry, or these routes answer not found.
     /// </summary>
     public static IEndpointConventionBuilder MapAgUiFileDoor(this IEndpointRouteBuilder endpoints)
     {
@@ -237,30 +237,27 @@ internal static class AgUiFileRefs
     }
 
     /// <summary>
-    /// Runs the entry gate and the G-7 ownership hook for one thread-scoped request, as a turn of the entry that last
-    /// ran the conversation would. A conversation that kept no entry falls back to a hook's pick or the one declared
-    /// entry. Unknown or refused reads as not found.
+    /// Runs the G-7 ownership hook for one thread-scoped request: unknown or refused reads as not found. The entry is
+    /// the BeforeEntry hook's pick, else the one declared entry; with neither, the request reads as not found.
     /// </summary>
     internal static async ValueTask<bool> OwnedAsync(HttpContext http, string threadId, CancellationToken ct)
     {
-        if (await http.RequestServices.GetRequiredService<IConversations>().GetAsync(threadId, ct).ConfigureAwait(false) is not { } record)
-        {
-            return false;
-        }
-
-        string? stored = record.State?.Entry;
-        if (stored is not null)
-        {
-            http.Request.RouteValues[ResponsesEndpointRouteBuilderExtensions.EntryRouteParameter] = stored;
-        }
-
         string? entry = await AgentCoreEntries.ResolveAsync(http, ct).ConfigureAwait(false);
-        if (entry is null && stored is null && http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries.Entries is { Count: 1 } declared)
+        if (entry is null && http.RequestServices.GetRequiredService<AgentCoreBoot>().Entries.Entries is { Count: 1 } declared)
         {
             entry = declared.First();
         }
 
-        return entry is not null
-            && await AgentCoreConversationGate.AllowAsync(http, entry, threadId, resuming: false, ct).ConfigureAwait(false);
+        if (entry is null)
+        {
+            return false;
+        }
+
+        if (await http.RequestServices.GetRequiredService<IConversations>().GetAsync(threadId, ct).ConfigureAwait(false) is null)
+        {
+            return false;
+        }
+
+        return await AgentCoreConversationGate.AllowAsync(http, entry, threadId, resuming: false, ct).ConfigureAwait(false);
     }
 }

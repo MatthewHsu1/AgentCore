@@ -21,6 +21,7 @@ namespace AgentCore.AspNetCore.Endpoints;
 /// An approval splits the reply in two, as the live stream does: the asking turn stores the request (shown as the
 /// tool call), and the resuming turn re-stores the same call, which is skipped there.
 /// One read answers the newest <c>limit</c> turns before the <c>before</c> cursor; <c>nextCursor</c> asks for the next older page.
+/// Behind the G-7 ownership hook. A host that declares two or more entries must supply a BeforeEntry hook that picks the entry, or these routes answer not found.
 /// </summary>
 internal static class AgUiTurnHistory
 {

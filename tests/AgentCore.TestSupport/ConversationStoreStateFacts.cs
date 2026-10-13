@@ -43,19 +43,6 @@ namespace AgentCore.TestSupport
             }
         }
 
-        [AssertionMethod]
-        public static async Task TheEntryATurnWroteIsKept(IConversationStore store, CancellationToken cancellationToken)
-        {
-            _ = await store.CreateAsync("c1", cancellationToken);
-            _ = await store.AppendAsync(
-                "c1",
-                [new ConversationMessageDraft(0, new ChatMessage(ChatRole.User, "hi"), "m-0-u")],
-                new ConversationSessionState { NextTurnIndex = 1, Entry = "support" },
-                cancellationToken);
-
-            Expect("support", (await store.GetAsync("c1", cancellationToken))?.State?.Entry ?? "none", "the entry after a turn's append");
-        }
-
         private static async Task SeedAsync(IConversationStore store, CancellationToken cancellationToken)
         {
             _ = await store.CreateAsync("c1", cancellationToken);
