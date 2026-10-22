@@ -174,7 +174,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 
                 await _hearing.FlushAsync().ConfigureAwait(false);
 
-                await _finish.FinishAsync(ConversationEndReason.Faulted, SidebandClosedCause).ConfigureAwait(false);
+                OpenAiLiveLog.SessionEndedByOpenAi(Logger, CallId, SidebandClosedCause);
+
+                await _finish.HangUpAndFinishAsync(ConversationEndReason.Faulted, SidebandClosedCause, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
