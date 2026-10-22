@@ -174,7 +174,9 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
 
                 await _hearing.FlushAsync().ConfigureAwait(false);
 
-                await _finish.FinishAsync(ConversationEndReason.Faulted, SidebandClosedCause).ConfigureAwait(false);
+                OpenAiLiveLog.SessionEndedByOpenAi(Logger, CallId, SidebandClosedCause);
+
+                await _finish.HangUpAndFinishAsync(ConversationEndReason.Faulted, SidebandClosedCause, cancellationToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -267,7 +269,11 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
                 case LiveEvent.Closed end:
                     await _hearing.FlushAsync().ConfigureAwait(false);
 
-                    await _finish.FinishAsync(ConversationEndReason.CallerHungUp, end.Reason ?? SidebandClosedCause).ConfigureAwait(false);
+                    string cause = end.Reason ?? SidebandClosedCause;
+
+                    OpenAiLiveLog.SessionEndedByOpenAi(Logger, CallId, cause);
+
+                    await _finish.HangUpAndFinishAsync(ConversationEndReason.CallerHungUp, cause, cancellationToken).ConfigureAwait(false);
 
                     return true;
 

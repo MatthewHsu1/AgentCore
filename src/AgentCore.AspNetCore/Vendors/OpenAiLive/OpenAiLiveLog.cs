@@ -59,5 +59,8 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive
 
         [LoggerMessage(EventId = 328, Level = LogLevel.Warning, Message = "a fact for the voice of the call {CallId} could not be sent, so the voice goes on without it.")]
         internal static partial void VoiceContextFailed(ILogger logger, string callId, Exception fault);
+
+        [LoggerMessage(EventId = 329, Level = LogLevel.Warning, Message = "the session of the call {CallId} ended on OpenAI's side ({Cause}); the call is hung up.")]
+        internal static partial void SessionEndedByOpenAi(ILogger logger, string callId, string cause);
     }
 }

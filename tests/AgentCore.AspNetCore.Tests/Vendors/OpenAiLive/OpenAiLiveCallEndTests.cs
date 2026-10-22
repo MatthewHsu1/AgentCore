@@ -5,6 +5,7 @@ using AgentCore.AspNetCore.Vendors.OpenAiLive.Call;
 using AgentCore.AspNetCore.Vendors.OpenAiLive.Wire;
 using AgentCore.Domain.Audit;
 using AgentCore.TestSupport;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using static AgentCore.AspNetCore.Tests.Vendors.OpenAiLive.LiveSent;
 
@@ -132,11 +133,15 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.False(hungUpOnTheFirstAck);
         }
 
-        // A caller who hangs up before the ack is not hung up again, and the call still finishes.
+        // OpenAI ending the session is not proof the caller's line is down (the audio stopped silently on live calls),
+        // so a Closed event hangs the line up once and says why in a warning.
         [Fact(Timeout = 30_000)]
-        public async Task ACallerHangUpBeforeTheAckFinishesTheCallWithNoHangUp()
+        public async Task AClosedEventHangsTheCallUpOnceAndLogsAWarning()
         {
-            await using RunningLiveCall running = await RunningLiveCall.StartAsync(new StallOnCueChatClient(), [], EndsAfterTheFirstAskYaml);
+            using EventObservedLoggerProvider warned = new("SessionEndedByOpenAi");
+            RecordingHook hook = new();
+            await using RunningLiveCall running = await RunningLiveCall.StartAsync(
+                new StallOnCueChatClient(), [hook], logger: warned.CreateLogger("test"));
             IReadOnlyList<string> log = LiveLog.Inbound("p1-a");
             int delegation = LiveLog.IndexOf(log, OpenAiLiveEvents.DelegationCreated);
 
@@ -144,9 +149,37 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             _ = await running.Sideband.WaitForSentAsync(IsCommentary);
             running.Sideband.Push([log[LiveLog.IndexOf(log, OpenAiLiveEvents.Closed)]]);
             await running.Loop;
+            ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
 
-            Assert.False(running.HungUp.Task.IsCompleted);
+            Assert.True(running.HungUp.Task.IsCompleted);
             Assert.True(running.Call.HasEnded);
+            Assert.Equal((ConversationEndReason.CallerHungUp, "close_requested"), (ended.Reason, ended.Call!.Cause));
+            Assert.Equal(1, warned.Count);
+            Assert.Equal(LogLevel.Warning, warned.Level);
+            Assert.Contains("close_requested", warned.Message, StringComparison.Ordinal);
+        }
+
+        // A sideband that closes mid-call with no Closed event ends the same way: one hang-up, one warning.
+        [Fact(Timeout = 30_000)]
+        public async Task ASidebandClosingMidCallHangsTheCallUpOnceAndLogsAWarning()
+        {
+            using EventObservedLoggerProvider warned = new("SessionEndedByOpenAi");
+            RecordingHook hook = new();
+            await using RunningLiveCall running = await RunningLiveCall.StartAsync(
+                new StallOnCueChatClient(), [hook], logger: warned.CreateLogger("test"));
+            IReadOnlyList<string> log = LiveLog.Inbound("p1-a");
+
+            running.Sideband.Push(log.Take(LiveLog.IndexOf(log, OpenAiLiveEvents.DelegationCreated) + 1));
+            _ = await running.Sideband.WaitForSentAsync(IsCommentary);
+            running.Sideband.Complete();
+            await running.Loop;
+            ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
+
+            Assert.True(running.HungUp.Task.IsCompleted);
+            Assert.Equal((ConversationEndReason.Faulted, "sideband_closed"), (ended.Reason, ended.Call!.Cause));
+            Assert.Equal(1, warned.Count);
+            Assert.Equal(LogLevel.Warning, warned.Level);
+            Assert.Contains("sideband_closed", warned.Message, StringComparison.Ordinal);
         }
 
         // With no commentary to wait for, the hang-up is at once. The clock never moves, so no wait on a
