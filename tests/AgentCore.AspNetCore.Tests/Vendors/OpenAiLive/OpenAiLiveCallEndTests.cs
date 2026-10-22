@@ -133,10 +133,9 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             Assert.False(hungUpOnTheFirstAck);
         }
 
-        // OpenAI ending the session is not proof the caller's line is down (the audio stopped silently on live calls),
-        // so a Closed event hangs the line up once and says why in a warning.
+        // A Closed event is how a caller's hang-up arrives, so the call finishes with no hang-up request and no warning.
         [Fact(Timeout = 30_000)]
-        public async Task AClosedEventHangsTheCallUpOnceAndLogsAWarning()
+        public async Task AClosedEventFinishesTheCallWithNoHangUpAndNoWarning()
         {
             using EventObservedLoggerProvider warned = new("SessionEndedByOpenAi");
             RecordingHook hook = new();
@@ -151,15 +150,13 @@ namespace AgentCore.AspNetCore.Tests.Vendors.OpenAiLive
             await running.Loop;
             ConversationEnded ended = await hook.WaitForAsync<ConversationEnded>();
 
-            Assert.True(running.HungUp.Task.IsCompleted);
+            Assert.False(running.HungUp.Task.IsCompleted);
             Assert.True(running.Call.HasEnded);
             Assert.Equal((ConversationEndReason.CallerHungUp, "close_requested"), (ended.Reason, ended.Call!.Cause));
-            Assert.Equal(1, warned.Count);
-            Assert.Equal(LogLevel.Warning, warned.Level);
-            Assert.Contains("close_requested", warned.Message, StringComparison.Ordinal);
+            Assert.Equal(0, warned.Count);
         }
 
-        // A sideband that closes mid-call with no Closed event ends the same way: one hang-up, one warning.
+        // A sideband that closes mid-call with no Closed event is an end on OpenAI's side: one hang-up, one warning.
         [Fact(Timeout = 30_000)]
         public async Task ASidebandClosingMidCallHangsTheCallUpOnceAndLogsAWarning()
         {

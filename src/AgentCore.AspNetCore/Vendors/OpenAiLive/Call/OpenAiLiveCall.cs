@@ -269,11 +269,7 @@ namespace AgentCore.AspNetCore.Vendors.OpenAiLive.Call
                 case LiveEvent.Closed end:
                     await _hearing.FlushAsync().ConfigureAwait(false);
 
-                    string cause = end.Reason ?? SidebandClosedCause;
-
-                    OpenAiLiveLog.SessionEndedByOpenAi(Logger, CallId, cause);
-
-                    await _finish.HangUpAndFinishAsync(ConversationEndReason.CallerHungUp, cause, cancellationToken).ConfigureAwait(false);
+                    await _finish.FinishAsync(ConversationEndReason.CallerHungUp, end.Reason ?? SidebandClosedCause).ConfigureAwait(false);
 
                     return true;
 
